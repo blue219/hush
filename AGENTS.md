@@ -33,5 +33,8 @@ The visual system should respond gradually rather than directly mirroring noisy 
 ## Structure
 
 ## Rules
+- Check files under "docs/" before coding
+- only Use English on UI
+- Use current exist UI style, do not change UI style without permissions.
 
 

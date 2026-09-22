@@ -46,8 +46,8 @@ class MeditationGalaxyScreenTest {
         }
         compose.mainClock.autoAdvance = false
         compose.mainClock.advanceTimeBy(12_000)
-        compose.onNodeWithText("01:05").assertIsDisplayed()
-        compose.onNodeWithText("Pause").assertIsDisplayed()
+        compose.onNodeWithText("18:55").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Pause").assertIsDisplayed()
         compose.onNodeWithText("Finish").assertIsDisplayed()
         saveScreenshot("galaxy-calm.png")
         compose.runOnIdle {
@@ -55,9 +55,9 @@ class MeditationGalaxyScreenTest {
         }
         compose.mainClock.advanceTimeBy(12_000)
         saveScreenshot("galaxy-scattered.png")
-        compose.onNodeWithText("Pause").performClick()
+        compose.onNodeWithContentDescription("Pause").performClick()
         compose.mainClock.advanceTimeByFrame()
-        compose.onNodeWithText("Resume").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Resume").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(1_000)
         val frozen = galaxyCrop()
         compose.mainClock.advanceTimeBy(2_000)
@@ -73,8 +73,8 @@ class MeditationGalaxyScreenTest {
         compose.mainClock.advanceTimeBy(30_000)
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         compose.mainClock.advanceTimeByFrame()
-        compose.onNodeWithText("Resume").assertIsDisplayed()
-        compose.onNodeWithText("Resume").performClick()
+        compose.onNodeWithContentDescription("Resume").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Resume").performClick()
         compose.mainClock.advanceTimeByFrame()
         compose.runOnIdle { state.value = state.value.copy(elapsedSeconds = 66) }
         compose.mainClock.advanceTimeByFrame()
@@ -83,6 +83,9 @@ class MeditationGalaxyScreenTest {
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithText("Reconnecting…").assertIsDisplayed()
         compose.onNodeWithText("Finish").performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.runOnIdle { assertEquals(0, finished) }
+        compose.onNodeWithText("End session").performClick()
         compose.runOnIdle { assertEquals(1, finished) }
     }
 
@@ -103,8 +106,8 @@ class MeditationGalaxyScreenTest {
                     }
                 }
             }
-            compose.onNodeWithText("01:05").assertIsDisplayed()
-            compose.onNodeWithText("Resume").assertIsDisplayed()
+            compose.onNodeWithText("18:55").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Resume").assertIsDisplayed()
             compose.onNodeWithText("Finish").assertIsDisplayed()
             compose.onNodeWithContentDescription("Adjust volume").performClick()
             compose.onNodeWithContentDescription("Meditation volume").assertIsDisplayed()

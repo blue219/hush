@@ -3,10 +3,14 @@
 ## Running the MVP
 
 1. Install the debug APK on a physical Android device and enable Bluetooth.
-2. On the Hush Meditation tab, grant Bluetooth and notification permissions, scan for Muse 2, and connect it.
-3. Choose 10, 20, or 30 minutes and a music track, then tap `Start meditation`.
-4. While the session is active, the foreground service continues timing, collection, and audio after the screen is locked. The session can be paused, ended early, and have its volume changed.
-5. After completion, open the History tab to inspect the result, Mindprint, relative trend chart, and draggable replay timeline.
+2. On Home, tap `Connect Muse` to grant permission. While Home is visible, Hush discovers and automatically connects the remembered Muse. On first use, one discovered device connects automatically; multiple devices require a selection in the device sheet.
+3. Choose 10, 20, or 30 minutes and select/preview Mist or Tide from the soundscape sheet. Tap `Start meditation` after connection.
+4. The full-screen session shows remaining time, Pause/Resume, volume, and Finish. Finish or Back opens a confirmation; Back first dismisses an open volume panel. Confirming ends and saves the session. Dismissing confirmation does not change its running/paused state.
+5. Completion opens a separate summary. History contains saved sessions, relative trends and a draggable replay. Home and History are the only navigation tabs.
+
+Discovery stops when Home is hidden, the app goes into the background, a connection starts, or simulation is enabled. Existing connections remain alive when merely leaving Home. Active sessions are service-owned and may reconnect the original Muse in the background. A remembered device is never silently replaced by another nearby device. Connection failures retry after 2, 4, 8, 16, then 30 seconds; connection attempts time out after 20 seconds. Device selection waits 1.5 seconds for discovery results. Native callback generations prevent disposed managers from publishing into a new connection attempt.
+
+`Disconnect` pauses automatic connection for the current app process (including activity recreation). Tap `Connect Muse` to resume. Permission dialogs require a user action; turning Bluetooth off exposes a settings entry point. A denied permission never triggers repeated automatic prompts.
 
 Bluetooth, lock-screen, reconnect, and long-session checks must be run on a physical device with the Android SDK configured.
 
@@ -41,7 +45,7 @@ Bluetooth, lock-screen, reconnect, and long-session checks must be run on a phys
 
 ## Meditation galaxy
 
-Active sessions (connecting, running, or paused) use a full-screen 720-star spiral galaxy. App navigation and system bars are hidden; system bars can be revealed by swiping. Elapsed time, Pause/Resume, Finish, and a volume icon stay visible inside safe drawing insets. The volume icon expands a slider. Back dismisses the slider and never ends the session. The home, completion, and history visuals retain their existing behavior.
+Active sessions (connecting, running, or paused) use a full-screen 720-star spiral galaxy. App navigation and system bars are hidden; system bars can be revealed by swiping. Remaining time, Pause/Resume, Finish, and volume remain within safe drawing insets. Landscape places controls beside the galaxy. Controls can scroll on constrained screens. Back dismisses the volume panel first; otherwise it opens the finish confirmation. Colors come from the shared fixed-dark theme.
 
 The artistic mapping uses Beta / (Alpha + Theta + Beta): shares at or below 0.2 produce slow spiral rotation; shares at or above 0.6 produce maximum independent drift. Intermediate values interpolate continuously. This is not a validated measure of thoughts or meditation quality. Rising agitation has a 2.5-second exponential time constant; regrouping has a 4-second time constant. These are smoothing rates, not hard transition deadlines.
 
@@ -59,6 +63,16 @@ The focused on-device UI test can be run with `./gradlew :app:connectedDebugAndr
 
 ## Saved simulation data
 
-The Meditation tab's connection card includes `Use saved simulation data`. It replays the checked-in ten-minute sample at `app/src/main/assets/simulation/muse_last_10m.csv` through the same foreground-session state path used by a live Muse connection. The file was exported from the latest complete ten-minute session available on the development phone; it contains 600 valid one-second samples and no device identifiers or timestamps.
+The Home device sheet includes `Try a simulation` (accessibility label: `Use saved simulation data`). It replays the checked-in ten-minute sample at `app/src/main/assets/simulation/muse_last_10m.csv` through the same foreground-session state path used by a live Muse connection. The file was exported from the latest complete ten-minute session available on the development phone; it contains 600 valid one-second samples and no device identifiers or timestamps.
 
-Simulation mode does not scan Bluetooth, always uses the ten-minute duration, plays the selected soundscape, and saves the replay as a normal local session. If the asset is missing or malformed, the option remains unavailable and the real Muse connection path is unchanged.
+Enabling simulation stops discovery and disconnects the idle Muse. Simulation mode does not scan Bluetooth, always uses the ten-minute duration, plays the selected soundscape, and saves the replay as a normal local session. If the asset is missing or malformed, the option remains unavailable and the real Muse connection path is unchanged.
+
+## UI validation
+
+The visual system and component conventions are in [Design system](design-system.md).
+
+Run focused unit checks with `./gradlew :app:testDebugUnitTest --tests com.blue.hush.AutoConnectPolicyTest --tests com.blue.hush.GalaxyMotionTest --tests com.blue.hush.SignalProcessorTest :app:compileDebugKotlin`.
+
+Run UI checks against an already running device with `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.blue.hush.MeditationGalaxyScreenTest,com.blue.hush.HushAppScreenTest,com.blue.hush.SimulationFlowTest` (set `ANDROID_SERIAL` when multiple devices are connected). They cover confirmation, countdown, pause, signal loss, landscape controls, simulation selection, soundscape dismissal, empty history, completion without signal, and large text. Screenshots are written to the app external files directory. The simulation integration test starts the real media-only foreground service without Bluetooth permission, pauses, saves and opens replay. Bluetooth discovery, remembered-device selection, background reconnection, and sustained frame pacing still require physical-device verification.
+
+Simulation uses only the media-playback foreground-service type; live Muse sessions also use connected-device. This allows the simulation entry point to work without Bluetooth permission.

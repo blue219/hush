@@ -7,7 +7,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,11 +17,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.CircleShape
+import com.blue.hush.ui.theme.HushColors
+import com.blue.hush.ui.theme.HushSpace
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,7 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalView
@@ -44,7 +51,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.blue.hush.session.SessionPhase
 import com.blue.hush.session.SessionState
-import java.util.Locale
 
 @Composable
 fun MeditationGalaxyScreen(
@@ -55,6 +61,7 @@ fun MeditationGalaxyScreen(
     onVolumeChanged: (Float) -> Unit,
 ) {
     var volumeExpanded by rememberSaveable { mutableStateOf(false) }
+    var confirmFinish by rememberSaveable { mutableStateOf(false) }
     val paused = state.phase == SessionPhase.PAUSED
     // The service can retain its last valid sample during a gap. Reject stale
     // seconds even if an intermediate connection update clears dataGap.
@@ -76,15 +83,20 @@ fun MeditationGalaxyScreen(
             previousBehavior?.let { controller?.systemBarsBehavior = it }
         }
     }
-    // Controls are always visible; Back only dismisses the expanded volume panel.
-    BackHandler { volumeExpanded = false }
-    Box(Modifier.fillMaxSize().background(Color(0xFF030711))) {
-        GalaxyParticleField(state.latestSample, signalMissing, paused, Modifier.fillMaxSize())
-        Column(
-            Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+    // Dismissing a panel must never also end the session.
+    BackHandler { if (volumeExpanded) volumeExpanded = false else confirmFinish = true }
+    if (confirmFinish) AlertDialog(
+        onDismissRequest = { confirmFinish = false },
+        title = { Text("End this session?") },
+        text = { Text("Your session will be saved.") },
+        confirmButton = { TextButton(onClick = { confirmFinish = false; onFinish() }) { Text("End session") } },
+        dismissButton = { TextButton(onClick = { confirmFinish = false }) { Text("Keep meditating") } },
+    )
+    BoxWithConstraints(Modifier.fillMaxSize().background(HushColors.Background).safeDrawingPadding()) {
+        val landscape = maxWidth > maxHeight
+        GalaxyParticleField(state.latestSample, signalMissing, paused,
+            Modifier.fillMaxHeight().fillMaxWidth(if (landscape) 0.58f else 1f).align(Alignment.CenterStart))
+        Column(Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = HushSpace.xl, vertical = HushSpace.md)) {
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -92,8 +104,8 @@ fun MeditationGalaxyScreen(
             ) {
                 Column {
                     Text(
-                        String.format(Locale.US, "%02d:%02d", state.elapsedSeconds / 60, state.elapsedSeconds % 60),
-                        color = Color(0xFFE7EDF7),
+                        "Meditation",
+                        color = HushColors.Text,
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     val status = when {
@@ -103,7 +115,7 @@ fun MeditationGalaxyScreen(
                         signalMissing -> "Waiting for EEG…"
                         else -> null
                     }
-                    status?.let { Text(it, color = Color(0xFF9EAEC4), style = MaterialTheme.typography.labelMedium) }
+                    status?.let { Text(it, color = HushColors.Muted, style = MaterialTheme.typography.labelMedium) }
                 }
                 IconButton(
                     onClick = { volumeExpanded = !volumeExpanded },
@@ -121,12 +133,21 @@ fun MeditationGalaxyScreen(
                             lineTo(w * 0.12f, h * 0.62f)
                             close()
                         }
-                        drawPath(speaker, Color(0xFFE7EDF7))
-                        drawArc(Color(0xFFE7EDF7), -60f, 120f, false, Offset(w * 0.4f, h * 0.2f), androidx.compose.ui.geometry.Size(w * 0.48f, h * 0.6f), style = Stroke(1.5.dp.toPx()))
+                        drawPath(speaker, HushColors.Text)
+                        drawArc(HushColors.Text, -60f, 120f, false, Offset(w * 0.4f, h * 0.2f), androidx.compose.ui.geometry.Size(w * 0.48f, h * 0.6f), style = Stroke(1.5.dp.toPx()))
                     }
                 }
             }
-            Column(Modifier.widthIn(max = 420.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        }
+            Column(
+                Modifier.align(if (landscape) Alignment.BottomEnd else Alignment.BottomCenter)
+                    .widthIn(max = if (landscape) 280.dp else 420.dp).fillMaxWidth()
+                    .heightIn(max = (maxHeight - 76.dp).coerceAtLeast(100.dp))
+                    .verticalScroll(rememberScrollState()).padding(horizontal = HushSpace.xl, vertical = HushSpace.md),
+                verticalArrangement = Arrangement.spacedBy(HushSpace.sm), horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(formatDuration(state.plannedSeconds - state.elapsedSeconds), style = MaterialTheme.typography.displayLarge, color = HushColors.Text)
+                Text("Time remaining", style = MaterialTheme.typography.bodySmall, color = HushColors.Muted)
                 if (volumeExpanded) {
                     Slider(
                         value = state.volume,
@@ -134,17 +155,25 @@ fun MeditationGalaxyScreen(
                         modifier = Modifier.semantics { contentDescription = "Meditation volume" },
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        onClick = if (paused) onResume else onPause,
-                        enabled = paused || state.phase == SessionPhase.RUNNING,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBBDFFF), contentColor = Color(0xFF102136)),
-                        modifier = Modifier.weight(1f),
-                    ) { Text(if (paused) "Resume" else "Pause") }
-                    OutlinedButton(onClick = onFinish, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE7EDF7))) { Text("Finish") }
+                Button(
+                    onClick = if (paused) onResume else onPause,
+                    enabled = paused || state.phase == SessionPhase.RUNNING,
+                    shape = CircleShape,
+                    modifier = Modifier.size(76.dp).semantics { contentDescription = if (paused) "Resume" else "Pause" },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                ) {
+                    Canvas(Modifier.size(24.dp)) {
+                        if (paused) {
+                            val path = Path().apply { moveTo(5f, 0f); lineTo(size.width, size.height / 2); lineTo(5f, size.height); close() }
+                            drawPath(path, HushColors.OnAccent)
+                        } else {
+                            drawRect(HushColors.OnAccent, size = androidx.compose.ui.geometry.Size(size.width * 0.25f, size.height))
+                            drawRect(HushColors.OnAccent, topLeft = Offset(size.width * 0.75f, 0f), size = androidx.compose.ui.geometry.Size(size.width * 0.25f, size.height))
+                        }
+                    }
                 }
+                TextButton(onClick = { confirmFinish = true }) { Text("Finish") }
             }
-        }
     }
 }
 

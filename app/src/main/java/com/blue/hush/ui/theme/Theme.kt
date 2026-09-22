@@ -1,58 +1,43 @@
 package com.blue.hush.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+object HushSpace {
+    val xs = 4.dp
+    val sm = 8.dp
+    val md = 12.dp
+    val lg = 16.dp
+    val xl = 24.dp
+    val xxl = 32.dp
+    val contentWidth = 640.dp
+}
+object HushMotion { const val TransitionMillis = 250 }
+object HushShapes {
+    val Panel = RoundedCornerShape(24.dp)
+    val Control = RoundedCornerShape(12.dp)
+    val Pill = RoundedCornerShape(50)
+}
+private val Colors = darkColorScheme(
+    primary = HushColors.Accent, onPrimary = HushColors.OnAccent,
+    primaryContainer = HushColors.Glow, onPrimaryContainer = HushColors.Text,
+    secondary = HushColors.Lavender, onSecondary = HushColors.OnAccent,
+    secondaryContainer = HushColors.SurfaceRaised, onSecondaryContainer = HushColors.Accent,
+    tertiary = HushColors.Star, onTertiary = HushColors.OnAccent,
+    tertiaryContainer = HushColors.Glow, onTertiaryContainer = HushColors.Text,
+    surfaceTint = HushColors.Accent,
+    background = HushColors.Background, onBackground = HushColors.Text,
+    surface = HushColors.Surface, onSurface = HushColors.Text,
+    surfaceVariant = HushColors.SurfaceRaised, onSurfaceVariant = HushColors.Muted,
+    outline = HushColors.Border, outlineVariant = HushColors.Border, error = HushColors.Error,
 )
-
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-)
-
 @Composable
-fun HushTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+fun HushTheme(content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = Colors, typography = Typography,
+        shapes = Shapes(small = HushShapes.Control, medium = HushShapes.Panel, large = HushShapes.Panel),
+        content = content)
 }

@@ -1,5 +1,8 @@
 package com.blue.hush.ui
 
+import com.blue.hush.ui.theme.HushColors
+import com.blue.hush.ui.theme.HushShapes
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -73,8 +76,8 @@ fun GalaxyParticleField(sample: StateSample?, dataGap: Boolean, paused: Boolean,
         val center = Offset(size.width * 0.5f, size.height * 0.5f)
         val radius = size.minDimension * 0.36f
         if (radius <= 0f) return@Canvas
-        drawRect(Color(0xFF030711))
-        drawRect(Brush.radialGradient(listOf(Color(0xFF253454).copy(alpha = opacity * 0.65f), Color.Transparent), center, radius * 1.35f))
+        drawRect(HushColors.Background)
+        drawRect(Brush.radialGradient(listOf(HushColors.Glow.copy(alpha = opacity * 0.65f), Color.Transparent), center, radius * 1.35f))
         stars.forEachIndexed { index, star ->
             val angle = star.angle + time
             val drift = radius * chaos * 0.43f
@@ -82,9 +85,9 @@ fun GalaxyParticleField(sample: StateSample?, dataGap: Boolean, paused: Boolean,
             val y = sin(angle) * star.radius * radius * 0.64f + cos(time * 4.3f + star.phase * 2f) * drift
             val position = center + Offset(x * 0.94f - y * 0.34f, x * 0.34f + y * 0.94f)
             val color = when (index % 5) {
-                0 -> Color(0xFFFFE2B8)
-                1 -> Color(0xFFB8A5F5)
-                else -> Color(0xFFBBDFFF)
+                0 -> HushColors.Warm
+                1 -> HushColors.Lavender
+                else -> HushColors.Star
             }
             val alpha = opacity * (0.55f + sin(time * 2f + star.phase) * 0.2f)
             val dotRadius = star.size * (size.minDimension / 360f)
@@ -92,7 +95,7 @@ fun GalaxyParticleField(sample: StateSample?, dataGap: Boolean, paused: Boolean,
             drawCircle(color.copy(alpha = alpha), dotRadius, position)
         }
         drawCircle(
-            Brush.radialGradient(listOf(Color(0xFFFFE9CD).copy(alpha = opacity * (0.6f - chaos * 0.35f)), Color.Transparent), center, radius * 0.22f),
+            Brush.radialGradient(listOf(HushColors.Warm.copy(alpha = opacity * (0.6f - chaos * 0.35f)), Color.Transparent), center, radius * 0.22f),
             radius * 0.22f,
             center,
         )

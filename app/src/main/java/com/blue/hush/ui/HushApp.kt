@@ -1,0 +1,216 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+package com.blue.hush.ui
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.blue.hush.muse.MuseDeviceManager
+import com.blue.hush.replay.ReplayCursor
+import com.blue.hush.session.*
+import com.blue.hush.ui.theme.*
+import com.choosemuse.libmuse.ConnectionState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+enum class AppTab(val title: String) { MEDITATE("Home"), HISTORY("History") }
+data class ConnectionUiState(
+    val hasBluetoothPermission: Boolean = false,
+    val bluetoothEnabled: Boolean = true,
+    val isScanning: Boolean = false,
+    val devices: List<MuseDeviceManager.MuseDevice> = emptyList(),
+    val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
+    val connectedDeviceAddress: String? = null,
+    val errorMessage: String? = null,
+    val simulationMode: Boolean = false,
+    val simulationDataAvailable: Boolean = false,
+    val automaticConnectionPaused: Boolean = false,
+) {
+    val ready get() = if (simulationMode) simulationDataAvailable else connectionState == ConnectionState.CONNECTED
+    val status get() = when {
+        simulationMode -> if (simulationDataAvailable) "Simulation · 10 min" else "Simulation unavailable"
+        !hasBluetoothPermission -> "Bluetooth permission needed"
+        !bluetoothEnabled -> "Turn on Bluetooth"
+        connectionState == ConnectionState.CONNECTED -> "Muse connected"
+        connectionState == ConnectionState.CONNECTING -> "Connecting…"
+        automaticConnectionPaused -> "Connection paused"
+        isScanning -> "Searching for Muse…"
+        else -> "Connect your Muse"
+    }
+}
+
+@Composable
+private fun Page(title: String, onBack: (() -> Unit)? = null, content: @Composable () -> Unit) {
+    if (onBack != null) BackHandler(onBack = onBack)
+    Scaffold(topBar = { TopAppBar(title = { Text(title, style = MaterialTheme.typography.headlineMedium) },
+        navigationIcon = { if (onBack != null) TextButton(onClick = onBack) { Text("Back") } },
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = HushColors.Background)) }) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { content() }
+    }
+}
+
+@Composable
+fun HushApp(
+    sessionState: SessionState, history: List<SessionSummary>, activeTab: AppTab,
+    selectedDurationSeconds: Int, selectedTrack: MusicTrack, detailSummary: SessionSummary?,
+    detailSamples: List<StateSample>, replayProgress: Float, connectionState: ConnectionUiState,
+    previewTrack: MusicTrack?, onTabSelected: (AppTab) -> Unit, onDurationSelected: (Int) -> Unit,
+    onTrackSelected: (MusicTrack) -> Unit, onStartScanning: () -> Unit,
+    onConnect: (MuseDeviceManager.MuseDevice) -> Unit, onDisconnect: () -> Unit,
+    onStartSession: () -> Unit, onSimulationModeChanged: (Boolean) -> Unit,
+    onPause: () -> Unit, onResume: () -> Unit, onFinish: () -> Unit, onStartNewSession: () -> Unit,
+    onVolumeChanged: (Float) -> Unit, onOpenDetail: (SessionSummary) -> Unit,
+    onCloseDetail: () -> Unit, onReplayProgressChanged: (Float) -> Unit,
+    onPreviewTrack: (MusicTrack) -> Unit, onStopPreview: () -> Unit,
+) {
+    var deviceSheet by rememberSaveable { mutableStateOf(false) }
+    var musicSheet by rememberSaveable { mutableStateOf(false) }
+    if (sessionState.phase in listOf(SessionPhase.CONNECTING, SessionPhase.RUNNING, SessionPhase.PAUSED)) {
+        MeditationGalaxyScreen(sessionState, onPause, onResume, onFinish, onVolumeChanged)
+        return
+    }
+    if (detailSummary != null) {
+        SessionDetailScreen(detailSummary, detailSamples, replayProgress, onCloseDetail, onReplayProgressChanged)
+        return
+    }
+    if (sessionState.phase == SessionPhase.FINISHED) {
+        Page("Session complete", onStartNewSession) {
+            LazyColumn(Modifier.widthIn(max = HushSpace.contentWidth).fillMaxSize(), contentPadding = PaddingValues(HushSpace.xl), verticalArrangement = Arrangement.spacedBy(HushSpace.xl)) {
+                item { Text("Your Mindprint", style = MaterialTheme.typography.headlineMedium) }
+                item { ParticlePanel(sessionState.latestSample, sessionState.latestSample?.valid != true) }
+                item { HushPanel(Modifier.fillMaxWidth()) {
+                    Text(formatDuration(sessionState.elapsedSeconds), style = MaterialTheme.typography.displayLarge)
+                    Text(if (sessionState.validSampleCount >= 2) sessionState.result?.title ?: "Session saved" else "Not enough signal", style = MaterialTheme.typography.titleLarge)
+                    if (sessionState.validSampleCount >= 2) sessionState.result?.let { Text(it.description, color = HushColors.Muted) }
+                } }
+                item { PrimaryAction("View session", { history.firstOrNull { it.id == sessionState.sessionId }?.let(onOpenDetail) }, enabled = history.any { it.id == sessionState.sessionId }) }
+                item { TextButton(onClick = onStartNewSession, modifier = Modifier.fillMaxWidth()) { Text("Back to home") } }
+            }
+        }
+        return
+    }
+    Scaffold(containerColor = HushColors.Background, bottomBar = {
+        NavigationBar(containerColor = HushColors.Background) {
+            AppTab.entries.forEach { tab -> NavigationBarItem(selected = activeTab == tab, onClick = { onTabSelected(tab) },
+                icon = { HushNavIcon(tab) }, label = { Text(tab.title) }) }
+        }
+    }) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+            if (activeTab == AppTab.MEDITATE) {
+                LazyColumn(Modifier.widthIn(max = HushSpace.contentWidth).fillMaxSize(), contentPadding = PaddingValues(HushSpace.xl), verticalArrangement = Arrangement.spacedBy(HushSpace.lg)) {
+                    item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Hush", style = MaterialTheme.typography.headlineLarge)
+                        TextButton(onClick = { deviceSheet = true }) { Text(if (connectionState.ready) connectionState.status else "Muse 2") }
+                    } }
+                    item { HomeParticleField() }
+                    item { Text("A moment of stillness", style = MaterialTheme.typography.headlineMedium) }
+                    item { HushPanel(Modifier.fillMaxWidth()) {
+                        Text("DURATION", style = MaterialTheme.typography.labelSmall, color = HushColors.Muted)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(HushSpace.sm)) {
+                            listOf(10, 20, 30).forEach { minutes -> FilterChip(selected = selectedDurationSeconds == minutes * 60,
+                                onClick = { onDurationSelected(minutes * 60) }, enabled = !connectionState.simulationMode || minutes == 10,
+                                label = { Text("$minutes min") }, modifier = Modifier.weight(1f)) }
+                        }
+                        HorizontalDivider(color = HushColors.Border)
+                        TextButton(onClick = { musicSheet = true }, modifier = Modifier.fillMaxWidth()) { Text("Soundscape · ${selectedTrack.title}") }
+                        Text(connectionState.status, style = MaterialTheme.typography.bodySmall, color = HushColors.Muted)
+                        PrimaryAction(if (connectionState.ready) "Start meditation" else "Connect Muse", {
+                            if (connectionState.ready) onStartSession() else { deviceSheet = true; onStartScanning() }
+                        })
+                    } }
+                }
+            } else HistoryScreen(history, onOpenDetail)
+        }
+    }
+    if (deviceSheet) ModalBottomSheet(onDismissRequest = { deviceSheet = false }, containerColor = HushColors.Surface) {
+        LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(HushSpace.xl), verticalArrangement = Arrangement.spacedBy(HushSpace.lg)) {
+            item { Text("Your Muse", style = MaterialTheme.typography.headlineMedium); Text(connectionState.status, color = HushColors.Muted) }
+            connectionState.errorMessage?.let { message -> item { Text(message, color = HushColors.Error) } }
+            if (!connectionState.simulationMode) {
+                if (!connectionState.ready) item { PrimaryAction(if (connectionState.hasBluetoothPermission) "Connect Muse" else "Allow Bluetooth", onStartScanning) }
+                items(connectionState.devices, key = { it.macAddress }) { device ->
+                    OutlinedButton(onClick = { onConnect(device) }, enabled = connectionState.connectionState != ConnectionState.CONNECTING && connectionState.connectedDeviceAddress != device.macAddress, modifier = Modifier.fillMaxWidth()) {
+                        Column { Text(device.name.ifBlank { "Muse 2" }); Text(device.macAddress.takeLast(5), style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+                if (connectionState.ready) item { TextButton(onClick = onDisconnect) { Text("Disconnect") } }
+            }
+            item { HorizontalDivider(color = HushColors.Border) }
+            item { Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Text("Try a simulation"); Text("Saved session · 10 min", style = MaterialTheme.typography.bodySmall, color = HushColors.Muted) }
+                Switch(modifier = Modifier.semantics { contentDescription = "Use saved simulation data" }, checked = connectionState.simulationMode, onCheckedChange = onSimulationModeChanged, enabled = connectionState.simulationDataAvailable)
+            } }
+        }
+    }
+    if (musicSheet) {
+        DisposableEffect(Unit) { onDispose { onStopPreview() } }
+        ModalBottomSheet(onDismissRequest = { musicSheet = false }, containerColor = HushColors.Surface) {
+            Column(Modifier.padding(HushSpace.xl), verticalArrangement = Arrangement.spacedBy(HushSpace.lg)) {
+                Text("Soundscapes", style = MaterialTheme.typography.headlineMedium)
+                MusicTrack.entries.forEach { track -> HushPanel(Modifier.fillMaxWidth()) {
+                    Text(track.title, style = MaterialTheme.typography.titleLarge)
+                    Text(track.subtitle, color = HushColors.Muted)
+                    Row(horizontalArrangement = Arrangement.spacedBy(HushSpace.sm)) {
+                        FilterChip(selected = selectedTrack == track, onClick = { onTrackSelected(track) }, label = { Text(if (selectedTrack == track) "Selected" else "Select") })
+                        TextButton(onClick = { onPreviewTrack(track) }) { Text(if (previewTrack == track) "Stop preview" else "Preview") }
+                    }
+                } }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryScreen(history: List<SessionSummary>, onOpen: (SessionSummary) -> Unit) {
+    LazyColumn(Modifier.widthIn(max = HushSpace.contentWidth).fillMaxSize(), contentPadding = PaddingValues(HushSpace.xl), verticalArrangement = Arrangement.spacedBy(HushSpace.lg)) {
+        item { Text("History", style = MaterialTheme.typography.headlineLarge) }
+        if (history.isEmpty()) item { HushPanel(Modifier.fillMaxWidth()) { Text("Your quiet moments, collected."); Text("Complete a session to see it here.", color = HushColors.Muted) } }
+        items(history, key = { it.id }) { summary ->
+            Surface(onClick = { onOpen(summary) }, shape = HushShapes.Panel, color = HushColors.Surface, border = BorderStroke(1.dp, HushColors.Border)) {
+                Row(Modifier.fillMaxWidth().padding(HushSpace.lg), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(HushSpace.lg)) {
+                    MindprintThumbnail(summary.id, Modifier.size(56.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(HushSpace.xs)) {
+                        Text(formatDate(summary.startedAt), style = MaterialTheme.typography.titleMedium)
+                        Text("${formatDuration(summary.actualSeconds)} · ${summary.track.title}", color = HushColors.Muted, style = MaterialTheme.typography.bodySmall)
+                        Text(if (summary.validSampleCount >= 2) summary.result.title else "Not enough signal", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun SessionDetailScreen(summary: SessionSummary, samples: List<StateSample>, progress: Float, onBack: () -> Unit, onProgress: (Float) -> Unit) {
+    val cursor = remember(samples) { ReplayCursor(samples) }
+    val sample = cursor.sampleAt(progress)
+    Page("Session details", onBack) {
+        LazyColumn(Modifier.widthIn(max = HushSpace.contentWidth).fillMaxSize(), contentPadding = PaddingValues(HushSpace.xl), verticalArrangement = Arrangement.spacedBy(HushSpace.xl)) {
+            item { Text(formatDate(summary.startedAt), color = HushColors.Muted); Text(formatDuration(summary.actualSeconds), style = MaterialTheme.typography.displayLarge) }
+            item { ParticlePanel(sample, sample?.valid != true) }
+            item { HushPanel(Modifier.fillMaxWidth()) {
+                Text("Replay", style = MaterialTheme.typography.titleMedium)
+                Slider(value = progress, onValueChange = onProgress, modifier = Modifier.semantics { contentDescription = "Session replay" })
+                Text(formatDuration(sample?.elapsedSeconds ?: 0), color = HushColors.Muted)
+            } }
+            item { HushPanel(Modifier.fillMaxWidth()) {
+                Text("Relative trends", style = MaterialTheme.typography.titleMedium)
+                TrendChart(samples)
+                Text("Alpha · Theta · Beta · Stillness", style = MaterialTheme.typography.bodySmall, color = HushColors.Muted)
+                Text("Gaps indicate missing signal.", style = MaterialTheme.typography.bodySmall, color = HushColors.Muted)
+            } }
+            item { Text(if (summary.validSampleCount >= 2) summary.result.description else "Not enough signal to describe this session.", color = HushColors.Muted) }
+        }
+    }
+}
+internal fun formatDuration(seconds: Int): String = String.format(Locale.US, "%02d:%02d", seconds.coerceAtLeast(0) / 60, seconds.coerceAtLeast(0) % 60)
+private fun formatDate(timestamp: Long): String = SimpleDateFormat("MMM d, yyyy", Locale.ENGLISH).format(Date(timestamp))

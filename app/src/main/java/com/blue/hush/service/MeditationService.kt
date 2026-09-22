@@ -96,7 +96,7 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startAsForeground()
+        startAsForeground(if (intent?.action == ACTION_START) intent.getBooleanExtra(EXTRA_SIMULATION_MODE, false) else simulationMode)
         when (intent?.action) {
             ACTION_START -> startSession(intent)
             ACTION_PAUSE -> pauseSession()
@@ -268,14 +268,15 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
         replaySamples.firstOrNull { it.elapsedSeconds == elapsedSeconds }
             ?: StateSample(elapsedSeconds = elapsedSeconds)
 
-    private fun startAsForeground() {
+    private fun startAsForeground(simulated: Boolean) {
         val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+                // Simulation has no Bluetooth owner and must work without Bluetooth permission.
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or
+                    if (simulated) 0 else ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)

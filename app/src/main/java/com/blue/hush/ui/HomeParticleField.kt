@@ -1,5 +1,8 @@
 package com.blue.hush.ui
 
+import com.blue.hush.ui.theme.HushColors
+import com.blue.hush.ui.theme.HushShapes
+
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -12,7 +15,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -67,8 +69,8 @@ fun HomeParticleField(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .height(264.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(Color(0xFF071321)),
+            .clip(HushShapes.Panel)
+            .background(HushColors.Background),
     ) {
         Canvas(Modifier.fillMaxSize()) {
             val center = Offset(size.width * 0.5f, size.height * 0.52f)
@@ -79,9 +81,9 @@ fun HomeParticleField(modifier: Modifier = Modifier) {
             drawRect(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color(0xFF244A62).copy(alpha = 0.52f),
-                        Color(0xFF10273A).copy(alpha = 0.34f),
-                        Color(0xFF071321).copy(alpha = 0f),
+                        HushColors.Glow.copy(alpha = 0.52f),
+                        HushColors.Surface.copy(alpha = 0.34f),
+                        HushColors.Background.copy(alpha = 0f),
                     ),
                     center = center,
                     radius = size.maxDimension * 0.72f,
@@ -89,12 +91,12 @@ fun HomeParticleField(modifier: Modifier = Modifier) {
             )
 
             drawCircle(
-                color = Color(0xFF8DD8D1).copy(alpha = 0.07f),
+                color = HushColors.Lavender.copy(alpha = 0.07f),
                 radius = maxDistance * 0.33f * breath,
                 center = center,
             )
             drawCircle(
-                color = Color(0xFFA6D9FF).copy(alpha = 0.12f),
+                color = HushColors.Accent.copy(alpha = 0.12f),
                 radius = maxDistance * 0.12f * breath,
                 center = center,
             )
@@ -109,9 +111,9 @@ fun HomeParticleField(modifier: Modifier = Modifier) {
                 )
                 val twinkle = 0.76f + sin(cycle * 2.2f + particle.phase) * 0.24f
                 val color = if (particle.warmth > 0.74f) {
-                    Color(0xFFFFD5B2)
+                    HushColors.Warm
                 } else {
-                    Color(0xFFA9D9FF)
+                    HushColors.Star
                 }
                 val alpha = particle.alpha * twinkle
 
@@ -122,7 +124,7 @@ fun HomeParticleField(modifier: Modifier = Modifier) {
             }
 
             drawCircle(
-                color = Color(0xFFE4FFFA).copy(alpha = 0.66f),
+                color = HushColors.Text.copy(alpha = 0.66f),
                 radius = 2.4f,
                 center = center,
             )

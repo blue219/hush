@@ -22,11 +22,11 @@ LibMuse callbacks are delivered from SDK worker threads. UI consumers must switc
 
 ## Scanning and connection
 
-The launcher activity exposes the MVP meditation flow. The Meditation tab owns the connection entry point:
+The launcher activity exposes the MVP meditation flow. Home owns the connection entry point:
 
 1. Grant the Bluetooth permission shown by the page.
-2. Tap `Scan` and put the Muse 2 into pairing mode if it is not already discoverable.
-3. Select the discovered device and tap `Connect`.
+2. Put the Muse 2 into pairing mode. Home searches automatically while visible.
+3. Hush automatically connects the remembered device, or the only discovered device on first use. Select a device in the sheet when multiple devices are available.
 4. Choose a duration and music track, then tap `Start meditation`.
 
 ## MVP session flow
@@ -48,3 +48,7 @@ The History tab uses the same saved samples for the Alpha/Theta/Beta/stillness r
 The session service consumes the relevant band, accelerometer, and signal-quality callbacks. PPG is the raw optical pulse signal; heart-rate extraction still requires a processing step after receiving PPG. Some packet types are generic LibMuse types and may not emit values on every Muse model. A physical Muse 2 and a real Android device with Bluetooth are required; an emulator cannot validate the Bluetooth/data path.
 
 The connection path selects Muse 2's `PRESET_50` stream so the app receives the derived EEG bands and available IMU/PPG data needed for session samples. When LibMuse reports a temporary `NaN` band value or poor signal-quality flag, the processor keeps the sample alive from the sensor streams that are available; only a second with no sensor callback is shown as a data gap. For meaningful EEG bands, make sure the band is worn correctly and reconnect after installing the latest debug APK.
+
+## Discovery ownership
+
+Idle discovery belongs only to the visible Home route. History, backgrounding, simulation, and session handoff cancel pending selections/retries and stop discovery. The active session service retains its existing background reconnection policy. The remembered address is a local preference, excluded from backup by the application policy. The UI uses typed `ConnectionState` values; it never infers connectivity from status text. See [MVP](mvp.md) for retry and manual-disconnect behavior.

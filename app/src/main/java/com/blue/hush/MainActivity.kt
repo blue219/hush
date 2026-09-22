@@ -11,86 +11,31 @@ import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.blue.hush.audio.AmbientAudioEngine
 import com.blue.hush.muse.MuseDeviceManager
+import com.blue.hush.muse.AutoConnectPolicy
 import com.blue.hush.replay.MuseReplaySource
-import com.blue.hush.replay.ReplayCursor
 import com.blue.hush.service.MeditationService
 import com.blue.hush.session.MusicTrack
-import com.blue.hush.session.ResultLabel
 import com.blue.hush.session.SessionPhase
 import com.blue.hush.session.SessionRuntime
-import com.blue.hush.session.SessionState
 import com.blue.hush.session.SessionSummary
 import com.blue.hush.session.StateSample
 import com.blue.hush.storage.HushDatabase
-import com.blue.hush.ui.MeditationGalaxyScreen
-import com.blue.hush.ui.HomeParticleField
+import com.blue.hush.ui.*
 import com.blue.hush.ui.theme.HushTheme
 import com.choosemuse.libmuse.ConnectionState
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.Executors
 
-private enum class AppTab(val title: String, val icon: String) {
-    MEDITATE("Meditate", "◌"),
-    HISTORY("History", "◴"),
-    MUSIC("Music", "♫"),
-}
-
 class MainActivity : ComponentActivity() {
+    companion object { private var automaticConnectionPaused = false }
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val observedDataPacketCount = AtomicInteger()
-    private val observedDataPacketType = AtomicReference<String?>(null)
-    private val dataStatusUpdateScheduled = AtomicBoolean()
     private val ioExecutor = Executors.newSingleThreadExecutor()
     private lateinit var database: HushDatabase
     private var sessionState by mutableStateOf(SessionRuntime.current)
@@ -108,19 +53,11 @@ class MainActivity : ComponentActivity() {
     private var previewTrack by mutableStateOf<MusicTrack?>(null)
     private var removeSessionListener: (() -> Unit)? = null
 
-    private val publishDataStatus = Runnable {
-        dataStatusUpdateScheduled.set(false)
-        connectionStateUi = connectionStateUi.copy(
-            dataPacketCount = observedDataPacketCount.get(),
-            lastDataPacketType = observedDataPacketType.get(),
-        )
-    }
-
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { granted ->
         if (requiredBluetoothPermissions().all { granted[it] == true || hasPermission(it) }) {
-            initializeMuseManager()
+            syncDiscovery()
         } else {
             connectionStateUi = connectionStateUi.copy(
                 hasBluetoothPermission = false,
@@ -129,10 +66,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val museListener = object : MuseDeviceManager.Listener {
+    private var managerGeneration = 0
+    private fun museListener(generation: Int) = object : MuseDeviceManager.Listener {
         override fun onDevicesChanged(devices: List<MuseDeviceManager.MuseDevice>) {
             mainHandler.post {
-                connectionStateUi = connectionStateUi.copy(devices = devices, isScanning = true)
+                if (generation != managerGeneration || museManager == null || handoffPending) return@post
+                connectionStateUi = connectionStateUi.copy(devices = devices.distinctBy { it.macAddress })
+                if (canDiscover() && connectionStateUi.isScanning && !selectionPending) {
+                    selectionPending = true
+                    mainHandler.postDelayed(selectDevice, 1500L)
+                }
             }
         }
 
@@ -142,33 +85,64 @@ class MainActivity : ComponentActivity() {
             current: ConnectionState,
         ) {
             mainHandler.post {
+                if (generation != managerGeneration || museManager == null || handoffPending || connectionStateUi.connectedDeviceAddress != device.macAddress) return@post
+                mainHandler.removeCallbacks(connectionTimeout)
                 connectionStateUi = connectionStateUi.copy(
-                    connectionState = current.name,
+                    connectionState = current,
                     connectedDeviceAddress = if (current == ConnectionState.DISCONNECTED) null else device.macAddress,
                     isScanning = false,
                     errorMessage = null,
                 )
+                when (current) {
+                    ConnectionState.CONNECTED -> {
+                        retries = 0
+                        preferences.edit().putString("last_device", device.macAddress).apply()
+                    }
+                    ConnectionState.CONNECTING -> mainHandler.postDelayed(connectionTimeout, 20_000L)
+                    ConnectionState.NEEDS_UPDATE, ConnectionState.NEEDS_LICENSE -> {
+                        closeIdleManager()
+                        automaticConnectionPaused = true
+                        connectionStateUi = connectionStateUi.copy(
+                            automaticConnectionPaused = true,
+                            errorMessage = if (current == ConnectionState.NEEDS_UPDATE)
+                                "Muse requires a firmware update before connecting."
+                            else "Muse requires a valid SDK license before connecting.",
+                        )
+                    }
+                    else -> {
+                        closeIdleManager()
+                        scheduleRetry()
+                    }
+                }
             }
         }
 
-        override fun onDataPacket(packet: MuseDeviceManager.MusePacket) {
-            observedDataPacketCount.incrementAndGet()
-            observedDataPacketType.set(packet.type.name)
-            if (dataStatusUpdateScheduled.compareAndSet(false, true)) {
-                mainHandler.postDelayed(publishDataStatus, 500L)
-            }
-        }
+        override fun onDataPacket(packet: MuseDeviceManager.MusePacket) = Unit
 
         override fun onArtifact(packet: MuseDeviceManager.MuseArtifact) = Unit
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        activeTab = savedInstanceState?.getString("tab")?.let { runCatching { AppTab.valueOf(it) }.getOrNull() } ?: AppTab.MEDITATE
+        selectedDurationSeconds = savedInstanceState?.getInt("duration", 1200) ?: 1200
+        selectedTrack = savedInstanceState?.getString("track")?.let { runCatching { MusicTrack.valueOf(it) }.getOrNull() } ?: MusicTrack.MIST
+        connectionStateUi = connectionStateUi.copy(simulationMode = savedInstanceState?.getBoolean("simulation") ?: false)
         database = HushDatabase(applicationContext)
+        ContextCompat.registerReceiver(this, bluetoothReceiver, android.content.IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED)
         removeSessionListener = SessionRuntime.subscribe { state ->
             mainHandler.post {
+                if (isDestroyed) return@post
                 sessionState = state
-                if (state.phase == SessionPhase.FINISHED) refreshHistory()
+                if (state.phase == SessionPhase.IDLE && state.message != null) {
+                    handoffPending = false
+                    connectionStateUi = connectionStateUi.copy(errorMessage = state.message)
+                }
+                if (state.phase == SessionPhase.FINISHED) {
+                    handoffPending = false
+                    refreshHistory()
+                }
+                syncDiscovery()
             }
         }
         refreshHistory()
@@ -186,7 +160,7 @@ class MainActivity : ComponentActivity() {
                     replayProgress = replayProgress,
                     connectionState = connectionStateUi,
                     previewTrack = previewTrack,
-                    onTabSelected = { activeTab = it },
+                    onTabSelected = { activeTab = it; syncDiscovery() },
                     onDurationSelected = { selectedDurationSeconds = it },
                     onTrackSelected = {
                         selectedTrack = it
@@ -195,13 +169,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onStartScanning = ::startScanning,
                     onConnect = ::connectMuse,
-                    onDisconnect = {
-                        museManager?.disconnect()
-                        connectionStateUi = connectionStateUi.copy(
-                            connectionState = ConnectionState.DISCONNECTED.name,
-                            connectedDeviceAddress = null,
-                        )
-                    },
+                    onDisconnect = ::disconnectMuse,
                     onStartSession = { startSession(connectionStateUi.simulationMode) },
                     onSimulationModeChanged = { enabled ->
                         connectionStateUi = connectionStateUi.copy(
@@ -209,7 +177,11 @@ class MainActivity : ComponentActivity() {
                             simulationDataAvailable = simulationDataAvailable,
                             errorMessage = null,
                         )
-                        if (enabled) selectedDurationSeconds = MuseReplaySource.DURATION_SECONDS
+                        if (enabled) {
+                            selectedDurationSeconds = MuseReplaySource.DURATION_SECONDS
+                            closeIdleManager()
+                        }
+                        syncDiscovery()
                     },
                     onPause = { MeditationService.command(this, MeditationService.ACTION_PAUSE) },
                     onResume = { MeditationService.command(this, MeditationService.ACTION_RESUME) },
@@ -220,25 +192,122 @@ class MainActivity : ComponentActivity() {
                         sessionState = sessionState.copy(volume = it)
                     },
                     onOpenDetail = ::openDetail,
-                    onCloseDetail = { detailSummary = null },
+                    onCloseDetail = { detailSummary = null; syncDiscovery() },
                     onReplayProgressChanged = { replayProgress = it },
                     onPreviewTrack = ::togglePreview,
+                    onStopPreview = ::stopPreview,
                 )
             }
         }
-        if (hasBluetoothPermission()) initializeMuseManager()
+
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("tab", activeTab.name)
+        outState.putInt("duration", selectedDurationSeconds)
+        outState.putString("track", selectedTrack.name)
+        outState.putBoolean("simulation", connectionStateUi.simulationMode)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {
         removeSessionListener?.invoke()
         mainHandler.removeCallbacksAndMessages(null)
         previewEngine.stop()
-        museManager?.close()
-        museManager = null
-        database.close()
+        closeIdleManager()
+        unregisterReceiver(bluetoothReceiver)
+        ioExecutor.execute { database.close() }
         ioExecutor.shutdown()
         super.onDestroy()
     }
+
+    private var foreground = false
+    private var handoffPending = false
+    private var retries = 0
+    private val preferences by lazy { getSharedPreferences("muse_preferences", MODE_PRIVATE) }
+    private val bluetoothReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: android.content.Intent) { syncDiscovery() }
+    }
+    private var retryPending = false
+    private val retryDiscovery = Runnable { retryPending = false; syncDiscovery() }
+    private var selectionPending = false
+    private val selectDevice = Runnable {
+        selectionPending = false
+        if (canDiscover() && connectionStateUi.isScanning) {
+            val address = AutoConnectPolicy.choose(connectionStateUi.devices.map { it.macAddress }, preferences.getString("last_device", null))
+            connectionStateUi.devices.firstOrNull { it.macAddress == address }?.let(::connectMuse)
+        }
+    }
+    private val connectionTimeout = Runnable {
+        if (connectionStateUi.connectionState == ConnectionState.CONNECTING) {
+            closeIdleManager()
+            connectionStateUi = connectionStateUi.copy(errorMessage = "Connection timed out. Retrying…")
+            scheduleRetry()
+        }
+    }
+    override fun onStart() { super.onStart(); foreground = true; syncDiscovery() }
+    override fun onStop() {
+        foreground = false
+        stopPreview()
+        syncDiscovery()
+        super.onStop()
+    }
+    private fun bluetoothEnabled(): Boolean = runCatching {
+        getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter?.isEnabled == true
+    }.getOrDefault(false)
+    private fun canDiscover() = AutoConnectPolicy.eligible(
+        foreground && activeTab == AppTab.MEDITATE && detailSummary == null,
+        sessionState.phase == SessionPhase.IDLE && !handoffPending,
+        hasBluetoothPermission(), bluetoothEnabled(), connectionStateUi.simulationMode, automaticConnectionPaused)
+    private fun syncDiscovery() {
+        connectionStateUi = connectionStateUi.copy(hasBluetoothPermission = hasBluetoothPermission(),
+            bluetoothEnabled = bluetoothEnabled(), automaticConnectionPaused = automaticConnectionPaused)
+        if (!canDiscover()) {
+            cancelDiscoveryTasks()
+            if (museManager != null) runCatching { museManager?.stopScanning() }
+            connectionStateUi = connectionStateUi.copy(isScanning = false)
+            if (connectionStateUi.connectionState == ConnectionState.CONNECTING ||
+                !connectionStateUi.hasBluetoothPermission || !connectionStateUi.bluetoothEnabled) closeIdleManager()
+            return
+        }
+        if (connectionStateUi.connectionState != ConnectionState.DISCONNECTED || connectionStateUi.isScanning || retryPending) return
+        runCatching {
+            initializeMuseManager()
+            connectionStateUi = connectionStateUi.copy(isScanning = true, errorMessage = null)
+            museManager?.startScanning()
+        }.onFailure {
+            connectionStateUi = connectionStateUi.copy(isScanning = false, errorMessage = "Could not search for Muse. Check Bluetooth.")
+            scheduleRetry()
+        }
+    }
+    private fun scheduleRetry() {
+        if (!canDiscover()) return
+        mainHandler.removeCallbacks(retryDiscovery)
+        retryPending = true
+        mainHandler.postDelayed(retryDiscovery, AutoConnectPolicy.retryDelay(retries++))
+    }
+    private fun cancelDiscoveryTasks() {
+        retryPending = false
+        selectionPending = false
+        mainHandler.removeCallbacks(retryDiscovery)
+        mainHandler.removeCallbacks(selectDevice)
+        mainHandler.removeCallbacks(connectionTimeout)
+    }
+    private fun closeIdleManager() {
+        val manager = museManager
+        managerGeneration++
+        museManager = null
+        runCatching { manager?.close() }
+        connectionStateUi = connectionStateUi.copy(connectionState = ConnectionState.DISCONNECTED,
+            connectedDeviceAddress = null, isScanning = false, devices = emptyList())
+    }
+    private fun disconnectMuse() {
+        automaticConnectionPaused = true
+        cancelDiscoveryTasks()
+        closeIdleManager()
+        syncDiscovery()
+    }
+    private fun stopPreview() { previewTrack = null; previewEngine.stop() }
 
     private fun requestBluetoothPermission() {
         permissionLauncher.launch(requiredRequestPermissions())
@@ -246,31 +315,39 @@ class MainActivity : ComponentActivity() {
 
     private fun initializeMuseManager() {
         if (museManager != null) return
-        museManager = MuseDeviceManager(applicationContext, museListener)
-                    connectionStateUi = connectionStateUi.copy(hasBluetoothPermission = true, isInitialized = true, errorMessage = null)
+        museManager = MuseDeviceManager(applicationContext, museListener(++managerGeneration))
+        connectionStateUi = connectionStateUi.copy(hasBluetoothPermission = true, errorMessage = null)
     }
 
     private fun startScanning() {
-        if (!hasBluetoothPermission()) {
-            requestBluetoothPermission()
+        automaticConnectionPaused = false
+        if (!hasBluetoothPermission()) { requestBluetoothPermission(); return }
+        if (!bluetoothEnabled()) {
+            startActivity(android.content.Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS))
             return
         }
-        initializeMuseManager()
-        museManager?.startScanning()
-        connectionStateUi = connectionStateUi.copy(isScanning = true, errorMessage = null)
+        syncDiscovery()
     }
 
     private fun connectMuse(device: MuseDeviceManager.MuseDevice) {
+        automaticConnectionPaused = false
+        if (!canDiscover() || connectionStateUi.connectionState == ConnectionState.CONNECTING) return
+        cancelDiscoveryTasks()
         initializeMuseManager()
-        connectionStateUi = connectionStateUi.copy(
-            connectionState = "CONNECTING",
-            connectedDeviceAddress = device.macAddress,
-            errorMessage = null,
-        )
-        museManager?.connect(device)
+        connectionStateUi = connectionStateUi.copy(connectionState = ConnectionState.CONNECTING,
+            connectedDeviceAddress = device.macAddress, isScanning = false, errorMessage = null)
+        runCatching { museManager?.connect(device) }.onFailure {
+            closeIdleManager()
+            connectionStateUi = connectionStateUi.copy(connectionState = ConnectionState.DISCONNECTED,
+                connectedDeviceAddress = null, errorMessage = "Could not connect. Retrying…")
+            scheduleRetry()
+        }.onSuccess { mainHandler.postDelayed(connectionTimeout, 20_000L) }
     }
 
     private fun startSession(simulationMode: Boolean) {
+        if (handoffPending || sessionState.phase != SessionPhase.IDLE) return
+        stopPreview()
+        cancelDiscoveryTasks()
         if (simulationMode) {
             if (!simulationDataAvailable) {
                 connectionStateUi = connectionStateUi.copy(errorMessage = "The saved 10-minute simulation data is unavailable.")
@@ -279,28 +356,39 @@ class MainActivity : ComponentActivity() {
             museManager?.close()
             museManager = null
             connectionStateUi = connectionStateUi.copy(
-                connectionState = null,
+                connectionState = ConnectionState.DISCONNECTED,
                 connectedDeviceAddress = null,
                 errorMessage = null,
             )
-            MeditationService.startSimulation(this, selectedTrack, sessionState.volume)
+            handoffPending = true
+            runCatching { MeditationService.startSimulation(this, selectedTrack, sessionState.volume) }
+                .onFailure { sessionStartFailed() }
             return
         }
         val address = connectionStateUi.connectedDeviceAddress
-        if (address == null || connectionStateUi.connectionState != ConnectionState.CONNECTED.name) {
+        if (address == null || connectionStateUi.connectionState != ConnectionState.CONNECTED) {
             connectionStateUi = connectionStateUi.copy(errorMessage = "Connect Muse 2 before starting meditation.")
             return
         }
         val deviceName = connectionStateUi.devices.firstOrNull { it.macAddress == address }?.name ?: "Muse 2"
         // Release discovery before the foreground service takes ownership, but
         // keep the native Muse connection alive during the listener handoff.
+        handoffPending = true
         museManager?.releaseForHandoff()
         museManager = null
-        connectionStateUi = connectionStateUi.copy(connectionState = "DISCONNECTED", connectedDeviceAddress = null)
-        MeditationService.start(this, address, deviceName, selectedDurationSeconds, selectedTrack, sessionState.volume)
+        connectionStateUi = connectionStateUi.copy(connectionState = ConnectionState.DISCONNECTED, connectedDeviceAddress = null)
+        runCatching { MeditationService.start(this, address, deviceName, selectedDurationSeconds, selectedTrack, sessionState.volume) }
+            .onFailure { sessionStartFailed() }
+    }
+
+    private fun sessionStartFailed() {
+        handoffPending = false
+        connectionStateUi = connectionStateUi.copy(errorMessage = "Could not start the session. Please reconnect and try again.")
+        syncDiscovery()
     }
 
     private fun resetCompletedSession() {
+        activeTab = AppTab.MEDITATE
         SessionRuntime.resetToIdle(
             plannedSeconds = selectedDurationSeconds,
             track = selectedTrack,
@@ -312,9 +400,11 @@ class MainActivity : ComponentActivity() {
         ioExecutor.execute {
             val samples = database.loadSamples(summary.id)
             mainHandler.post {
+                if (isDestroyed) return@post
                 detailSummary = summary
                 detailSamples = samples
                 replayProgress = 0f
+                syncDiscovery()
             }
         }
     }
@@ -322,7 +412,7 @@ class MainActivity : ComponentActivity() {
     private fun refreshHistory() {
         ioExecutor.execute {
             val summaries = database.loadSummaries()
-            mainHandler.post { history = summaries }
+            mainHandler.post { if (!isDestroyed) history = summaries }
         }
     }
 
@@ -330,6 +420,7 @@ class MainActivity : ComponentActivity() {
         ioExecutor.execute {
             val available = MuseReplaySource.isUsable(MuseReplaySource.load(applicationContext))
             mainHandler.post {
+                if (isDestroyed) return@post
                 simulationDataAvailable = available
                 connectionStateUi = connectionStateUi.copy(simulationDataAvailable = available)
             }
@@ -360,372 +451,4 @@ class MainActivity : ComponentActivity() {
         addAll(requiredBluetoothPermissions())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
     }.toTypedArray()
-}
-
-@Composable
-private fun HushApp(
-    sessionState: SessionState,
-    history: List<SessionSummary>,
-    activeTab: AppTab,
-    selectedDurationSeconds: Int,
-    selectedTrack: MusicTrack,
-    detailSummary: SessionSummary?,
-    detailSamples: List<StateSample>,
-    replayProgress: Float,
-    connectionState: ConnectionUiState,
-    previewTrack: MusicTrack?,
-    onTabSelected: (AppTab) -> Unit,
-    onDurationSelected: (Int) -> Unit,
-    onTrackSelected: (MusicTrack) -> Unit,
-    onStartScanning: () -> Unit,
-    onConnect: (MuseDeviceManager.MuseDevice) -> Unit,
-    onDisconnect: () -> Unit,
-    onStartSession: () -> Unit,
-    onSimulationModeChanged: (Boolean) -> Unit,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onFinish: () -> Unit,
-    onStartNewSession: () -> Unit,
-    onVolumeChanged: (Float) -> Unit,
-    onOpenDetail: (SessionSummary) -> Unit,
-    onCloseDetail: () -> Unit,
-    onReplayProgressChanged: (Float) -> Unit,
-    onPreviewTrack: (MusicTrack) -> Unit,
-) {
-    if (sessionState.phase in setOf(SessionPhase.CONNECTING, SessionPhase.RUNNING, SessionPhase.PAUSED)) {
-        MeditationGalaxyScreen(sessionState, onPause, onResume, onFinish, onVolumeChanged)
-        return
-    }
-    if (detailSummary != null) {
-        SessionDetailScreen(detailSummary, detailSamples, replayProgress, onCloseDetail, onReplayProgressChanged)
-        return
-    }
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Hush", fontWeight = FontWeight.SemiBold) },
-            )
-        },
-        bottomBar = {
-            NavigationBar {
-                AppTab.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = activeTab == tab,
-                        onClick = { onTabSelected(tab) },
-                        icon = { Text(tab.icon, style = MaterialTheme.typography.titleLarge) },
-                        label = { Text(tab.title) },
-                    )
-                }
-            }
-        },
-    ) { innerPadding ->
-        when (activeTab) {
-            AppTab.MEDITATE -> MeditateScreen(
-                Modifier.padding(innerPadding), sessionState, connectionState, selectedDurationSeconds, selectedTrack,
-                onDurationSelected, onTrackSelected, onStartScanning, onConnect, onStartSession,
-                onSimulationModeChanged, onStartNewSession,
-                { id -> history.firstOrNull { it.id == id }?.let(onOpenDetail) }, onDisconnect,
-            )
-            AppTab.HISTORY -> HistoryScreen(Modifier.padding(innerPadding), history, onOpenDetail)
-            AppTab.MUSIC -> MusicScreen(Modifier.padding(innerPadding), selectedTrack, previewTrack, onTrackSelected, onPreviewTrack)
-        }
-    }
-}
-
-@Composable
-private fun MeditateScreen(
-    modifier: Modifier,
-    sessionState: SessionState,
-    connectionState: ConnectionUiState,
-    selectedDurationSeconds: Int,
-    selectedTrack: MusicTrack,
-    onDurationSelected: (Int) -> Unit,
-    onTrackSelected: (MusicTrack) -> Unit,
-    onStartScanning: () -> Unit,
-    onConnect: (MuseDeviceManager.MuseDevice) -> Unit,
-    onStartSession: () -> Unit,
-    onSimulationModeChanged: (Boolean) -> Unit,
-    onStartNewSession: () -> Unit,
-    onOpenDetail: (Long) -> Unit,
-    onDisconnect: () -> Unit,
-) {
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (sessionState.phase == SessionPhase.FINISHED) {
-            item { CompletionCard(sessionState, onOpenDetail, onStartNewSession) }
-        } else {
-            item { HomeParticleField() }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Make space for stillness", style = MaterialTheme.typography.headlineMedium)
-                    Text("Let change emerge slowly. There is nothing to chase.", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-            item { ConnectionCard(connectionState, onStartScanning, onConnect, onDisconnect, onSimulationModeChanged) }
-            item {
-                Text("Choose a duration", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    listOf(10 * 60, 20 * 60, 30 * 60).forEach { seconds ->
-                        FilterChip(
-                            selected = selectedDurationSeconds == seconds,
-                            onClick = { onDurationSelected(seconds) },
-                            enabled = !connectionState.simulationMode || seconds == MuseReplaySource.DURATION_SECONDS,
-                            label = { Text("${seconds / 60} min") },
-                        )
-                    }
-                }
-            }
-            item {
-                Card {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Soundscape · ${selectedTrack.title}", style = MaterialTheme.typography.titleMedium)
-                        Text(selectedTrack.subtitle, style = MaterialTheme.typography.bodySmall)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            MusicTrack.entries.forEach { track ->
-                                FilterChip(selected = selectedTrack == track, onClick = { onTrackSelected(track) }, label = { Text(track.title) })
-                            }
-                        }
-                    }
-                }
-            }
-            item {
-                Button(
-                    onClick = onStartSession,
-                    enabled = connectionState.simulationMode && connectionState.simulationDataAvailable ||
-                        connectionState.connectedDeviceAddress != null && connectionState.connectionState == ConnectionState.CONNECTED.name,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Start meditation") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ConnectionCard(
-    state: ConnectionUiState,
-    onStartScanning: () -> Unit,
-    onConnect: (MuseDeviceManager.MuseDevice) -> Unit,
-    onDisconnect: () -> Unit,
-    onSimulationModeChanged: (Boolean) -> Unit,
-) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Muse 2", style = MaterialTheme.typography.titleMedium)
-            Text(
-                when {
-                    state.simulationMode && state.simulationDataAvailable -> "Simulation data ready · 10-minute replay"
-                    state.simulationMode -> "Simulation data unavailable"
-                    !state.hasBluetoothPermission -> "Bluetooth permission required"
-                    state.connectionState == ConnectionState.CONNECTED.name -> "Connected and ready"
-                    state.isScanning -> "Looking for nearby devices…"
-                    else -> "Connect your headband"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            if (state.dataPacketCount > 0) {
-                Text(
-                    "Data packets received: ${state.dataPacketCount} · ${state.lastDataPacketType ?: "unknown"}",
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onStartScanning, enabled = !state.isScanning && !state.simulationMode) { Text(if (state.hasBluetoothPermission) "Scan" else "Grant permission") }
-                if (state.connectedDeviceAddress != null) {
-                    OutlinedButton(onClick = onDisconnect) { Text("Disconnect") }
-                }
-            }
-            FilterChip(
-                selected = state.simulationMode,
-                onClick = { onSimulationModeChanged(!state.simulationMode) },
-                label = { Text("Use saved simulation data") },
-            )
-            Text(
-                if (state.simulationDataAvailable) "Replays the latest complete 10-minute session bundled with this app."
-                else "No bundled 10-minute session is available.",
-                style = MaterialTheme.typography.labelSmall,
-            )
-            state.devices.take(3).forEach { device ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(device.name.ifBlank { "Muse 2" }, style = MaterialTheme.typography.bodyLarge)
-                        Text(device.macAddress, style = MaterialTheme.typography.bodySmall)
-                    }
-                    OutlinedButton(onClick = { onConnect(device) }, enabled = state.connectedDeviceAddress != device.macAddress) { Text(if (state.connectedDeviceAddress == device.macAddress) "Connected" else "Connect") }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompletionCard(
-    state: SessionState,
-    onOpenDetail: (Long) -> Unit,
-    onStartNewSession: () -> Unit,
-) {
-    val result = state.result ?: ResultLabel.STEADY
-    Card {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Meditation complete", style = MaterialTheme.typography.headlineSmall)
-            Text(result.title, style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary)
-            Text(result.description, style = MaterialTheme.typography.bodyLarge)
-            Text("Actual duration ${formatDuration(state.elapsedSeconds)} · valid samples ${state.validSampleCount}/${state.sampleCount}", style = MaterialTheme.typography.bodySmall)
-            Text("Mindprint", style = MaterialTheme.typography.titleMedium)
-            ParticlePanel(state.latestSample, state.latestSample?.valid != true)
-            OutlinedButton(onClick = onStartNewSession, modifier = Modifier.fillMaxWidth()) { Text("Meditate again") }
-            state.sessionId?.let { Button(onClick = { onOpenDetail(it) }, modifier = Modifier.fillMaxWidth()) { Text("View this session") } }
-            Text("This describes relative trends in this session and is not a medical assessment or absolute score.", style = MaterialTheme.typography.labelSmall)
-        }
-    }
-}
-
-@Composable
-private fun HistoryScreen(modifier: Modifier, history: List<SessionSummary>, onOpenDetail: (SessionSummary) -> Unit) {
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("History", style = MaterialTheme.typography.headlineMedium)
-            Text("Sessions are saved only on this device.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
-        }
-        if (history.isEmpty()) item { Text("Your first completed meditation will appear here.", modifier = Modifier.padding(top = 24.dp)) }
-        else items(history, key = { it.id }) { summary ->
-            Card(onClick = { onOpenDetail(summary) }) {
-                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(summary.result.title, style = MaterialTheme.typography.titleMedium)
-                        Text(formatDate(summary.startedAt), style = MaterialTheme.typography.bodySmall)
-                        Text("${formatDuration(summary.actualSeconds)} · ${summary.track.title}", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text("${summary.validSampleCount}/${summary.sampleCount} sec valid", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SessionDetailScreen(summary: SessionSummary, samples: List<StateSample>, replayProgress: Float, onBack: () -> Unit, onReplayProgressChanged: (Float) -> Unit) {
-    val cursor = remember(samples) { ReplayCursor(samples) }
-    val replaySample = cursor.sampleAt(replayProgress)
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Session details") }, navigationIcon = { IconButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineMedium) } })
-    }) { innerPadding ->
-        LazyColumn(Modifier.padding(innerPadding).fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            item {
-                Text(summary.result.title, style = MaterialTheme.typography.headlineMedium)
-                Text("${formatDate(summary.startedAt)} · ${formatDuration(summary.actualSeconds)} · ${summary.track.title} · ${summary.validSampleCount}/${summary.sampleCount} sec valid", style = MaterialTheme.typography.bodyMedium)
-            }
-            item { ParticlePanel(replaySample, replaySample?.valid != true) }
-            item {
-                Text("Particle replay", style = MaterialTheme.typography.titleMedium)
-                Slider(value = replayProgress, onValueChange = onReplayProgressChanged)
-                Text("${replaySample?.elapsedSeconds ?: 0} sec", style = MaterialTheme.typography.labelSmall)
-            }
-            item {
-                Text("Relative trends", style = MaterialTheme.typography.titleMedium)
-                TrendChart(samples)
-                Text("Alpha · Theta · Beta · stillness; blank areas indicate missing valid data.", style = MaterialTheme.typography.labelSmall)
-            }
-        }
-    }
-}
-
-@Composable
-private fun MusicScreen(modifier: Modifier, selectedTrack: MusicTrack, previewTrack: MusicTrack?, onTrackSelected: (MusicTrack) -> Unit, onPreviewTrack: (MusicTrack) -> Unit) {
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item {
-            Text("Music", style = MaterialTheme.typography.headlineMedium)
-            Text("Plays during meditation and pauses or stops with the session.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
-        }
-        items(MusicTrack.entries) { track ->
-            Card {
-                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(track.title, style = MaterialTheme.typography.titleMedium)
-                        Text(track.subtitle, style = MaterialTheme.typography.bodySmall)
-                    }
-                    FilterChip(selected = selectedTrack == track, onClick = { onTrackSelected(track) }, label = { Text("Select") })
-                    Spacer(Modifier.size(8.dp))
-                    OutlinedButton(onClick = { onPreviewTrack(track) }) { Text(if (previewTrack == track) "Stop" else "Preview") }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ParticlePanel(sample: StateSample?, dataGap: Boolean) {
-    Card(shape = RoundedCornerShape(28.dp)) {
-        Box(Modifier.fillMaxWidth().height(280.dp), contentAlignment = Alignment.Center) {
-            Canvas(Modifier.fillMaxSize()) {
-                val center = Offset(size.width / 2f, size.height / 2f)
-                val alpha = sample?.alpha?.toFloat() ?: 0.2f
-                val theta = sample?.theta?.toFloat() ?: 0.2f
-                val beta = sample?.beta?.toFloat() ?: 0.2f
-                val stillness = sample?.stillness?.toFloat() ?: 0f
-                val radius = 42f + stillness * 38f
-                for (index in 0 until 72) {
-                    val angle = index * 0.47f + alpha * 2.4f
-                    val distance = radius + (index % 9) * (8f + theta * 10f) + beta * 12f
-                    val x = center.x + kotlin.math.cos(angle.toDouble()).toFloat() * distance
-                    val y = center.y + kotlin.math.sin(angle.toDouble()).toFloat() * distance
-                    val color = Color(
-                        red = (0.42f + theta * 0.35f).coerceIn(0f, 1f),
-                        green = (0.68f + stillness * 0.25f).coerceIn(0f, 1f),
-                        blue = (0.72f + alpha * 0.2f).coerceIn(0f, 1f),
-                        alpha = if (sample?.valid == true) 0.72f else 0.18f,
-                    )
-                    drawCircle(color, radius = 2.2f + (index % 3), center = Offset(x, y))
-                }
-                drawCircle(Color(0xFF9ADBCB).copy(alpha = if (sample?.valid == true) 0.18f else 0.08f), radius = radius, center = center, style = Stroke(width = 18f))
-            }
-            if (dataGap) Text("Data gap", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun TrendChart(samples: List<StateSample>) {
-    Canvas(Modifier.fillMaxWidth().height(220.dp)) {
-        if (samples.count { it.valid } < 2) return@Canvas
-        val colors = listOf(Color(0xFF8ED5C5), Color(0xFFB7A7E8), Color(0xFFE7B578), Color(0xFF8FB9DE))
-        val values = listOf<(StateSample) -> Double?>({ it.alpha }, { it.theta }, { it.beta }, { it.stillness })
-        values.forEachIndexed { seriesIndex, selector ->
-            var path: Path? = null
-            samples.forEachIndexed { index, sample ->
-                if (!sample.valid) {
-                    path?.let { drawPath(it, colors[seriesIndex], style = Stroke(width = 4f)) }
-                    path = null
-                    return@forEachIndexed
-                }
-                val x = index.toFloat() / (samples.lastIndex).coerceAtLeast(1) * size.width
-                val y = size.height - (selector(sample)?.toFloat()?.coerceIn(0f, 1f) ?: 0f) * size.height
-                if (path == null) path = Path().also { it.moveTo(x, y) } else path?.lineTo(x, y)
-            }
-            path?.let { drawPath(it, colors[seriesIndex], style = Stroke(width = 4f)) }
-        }
-    }
-}
-
-private data class ConnectionUiState(
-    val hasBluetoothPermission: Boolean = false,
-    val isInitialized: Boolean = false,
-    val isScanning: Boolean = false,
-    val devices: List<MuseDeviceManager.MuseDevice> = emptyList(),
-    val connectionState: String? = null,
-    val connectedDeviceAddress: String? = null,
-    val dataPacketCount: Int = 0,
-    val lastDataPacketType: String? = null,
-    val errorMessage: String? = null,
-    val simulationMode: Boolean = false,
-    val simulationDataAvailable: Boolean = false,
-)
-
-private fun formatDuration(seconds: Int): String = "%02d:%02d".format(seconds / 60, seconds % 60)
-
-private fun formatDate(timestamp: Long): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ENGLISH).format(Date(timestamp))
-
-@Preview(showBackground = true)
-@Composable
-private fun HushPreview() {
-    HushTheme { ParticlePanel(StateSample(1, alpha = 0.4, theta = 0.3, beta = 0.2, stillness = 0.8, valid = true), false) }
 }
