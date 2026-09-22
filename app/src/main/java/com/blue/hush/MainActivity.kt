@@ -67,6 +67,8 @@ import com.blue.hush.session.SessionState
 import com.blue.hush.session.SessionSummary
 import com.blue.hush.session.StateSample
 import com.blue.hush.storage.HushDatabase
+import com.blue.hush.ui.MeditationGalaxyScreen
+import com.blue.hush.ui.HomeParticleField
 import com.blue.hush.ui.theme.HushTheme
 import com.choosemuse.libmuse.ConnectionState
 import java.text.SimpleDateFormat
@@ -353,6 +355,10 @@ private fun HushApp(
     onReplayProgressChanged: (Float) -> Unit,
     onPreviewTrack: (MusicTrack) -> Unit,
 ) {
+    if (sessionState.phase in setOf(SessionPhase.CONNECTING, SessionPhase.RUNNING, SessionPhase.PAUSED)) {
+        MeditationGalaxyScreen(sessionState, onPause, onResume, onFinish, onVolumeChanged)
+        return
+    }
     if (detailSummary != null) {
         SessionDetailScreen(detailSummary, detailSamples, replayProgress, onCloseDetail, onReplayProgressChanged)
         return
@@ -361,11 +367,6 @@ private fun HushApp(
         topBar = {
             TopAppBar(
                 title = { Text("Hush", fontWeight = FontWeight.SemiBold) },
-                actions = {
-                    if (sessionState.phase == SessionPhase.RUNNING || sessionState.phase == SessionPhase.PAUSED) {
-                        Text("Running in background", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(end = 16.dp))
-                    }
-                },
             )
         },
         bottomBar = {
@@ -384,8 +385,8 @@ private fun HushApp(
         when (activeTab) {
             AppTab.MEDITATE -> MeditateScreen(
                 Modifier.padding(innerPadding), sessionState, connectionState, selectedDurationSeconds, selectedTrack,
-                onDurationSelected, onTrackSelected, onStartScanning, onConnect, onStartSession, onPause, onResume,
-                onFinish, onStartNewSession, onVolumeChanged,
+                onDurationSelected, onTrackSelected, onStartScanning, onConnect, onStartSession,
+                onStartNewSession,
                 { id -> history.firstOrNull { it.id == id }?.let(onOpenDetail) }, onDisconnect,
             )
             AppTab.HISTORY -> HistoryScreen(Modifier.padding(innerPadding), history, onOpenDetail)
@@ -406,21 +407,15 @@ private fun MeditateScreen(
     onStartScanning: () -> Unit,
     onConnect: (MuseDeviceManager.MuseDevice) -> Unit,
     onStartSession: () -> Unit,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onFinish: () -> Unit,
     onStartNewSession: () -> Unit,
-    onVolumeChanged: (Float) -> Unit,
     onOpenDetail: (Long) -> Unit,
     onDisconnect: () -> Unit,
 ) {
-    val isActive = sessionState.phase == SessionPhase.RUNNING || sessionState.phase == SessionPhase.PAUSED || sessionState.phase == SessionPhase.CONNECTING
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (sessionState.phase == SessionPhase.FINISHED) {
             item { CompletionCard(sessionState, onOpenDetail, onStartNewSession) }
-        } else if (isActive) {
-            item { ActiveSessionCard(sessionState, onPause, onResume, onFinish, onVolumeChanged) }
         } else {
+            item { HomeParticleField() }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Make space for stillness", style = MaterialTheme.typography.headlineMedium)
@@ -502,29 +497,6 @@ private fun ConnectionCard(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ActiveSessionCard(state: SessionState, onPause: () -> Unit, onResume: () -> Unit, onFinish: () -> Unit, onVolumeChanged: (Float) -> Unit) {
-    val sample = state.latestSample
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text(if (state.phase == SessionPhase.PAUSED) "Paused" else "Meditating", style = MaterialTheme.typography.headlineSmall)
-                Text(if (state.connected) "Muse connected" else "Muse disconnected · timer continues", style = MaterialTheme.typography.bodySmall)
-            }
-            Text(formatDuration(state.elapsedSeconds), style = MaterialTheme.typography.titleLarge)
-        }
-        ParticlePanel(sample, state.dataGap)
-        state.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        Text("Soundscape: ${state.track.title}", style = MaterialTheme.typography.bodyMedium)
-        Slider(value = state.volume, onValueChange = onVolumeChanged, valueRange = 0f..1f)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = if (state.phase == SessionPhase.PAUSED) onResume else onPause, modifier = Modifier.weight(1f)) { Text(if (state.phase == SessionPhase.PAUSED) "Resume" else "Pause") }
-            OutlinedButton(onClick = onFinish, modifier = Modifier.weight(1f)) { Text("Finish early") }
-        }
-        Text("Valid samples ${state.validSampleCount}/${state.sampleCount} · only per-second trends are saved, not raw EEG/PPG", style = MaterialTheme.typography.labelSmall)
     }
 }
 

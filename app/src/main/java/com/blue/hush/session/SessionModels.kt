@@ -26,6 +26,8 @@ data class StateSample(
     val beta: Double? = null,
     val stillness: Double? = null,
     val valid: Boolean = false,
+    // Live-only availability; historical rows intentionally retain the default.
+    val eegBandsAvailable: Boolean = false,
 )
 
 data class SessionSummary(

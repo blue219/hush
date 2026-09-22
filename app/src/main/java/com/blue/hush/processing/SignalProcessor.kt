@@ -25,15 +25,15 @@ class SignalProcessor(
         when (type) {
             MuseDataPacketType.ALPHA_RELATIVE -> {
                 receivedSensorData = true
-                values.averageFiniteOrNull()?.let { alphaValues += it.coerceIn(0.0, 1.0) }
+                values.filter { it in 0.0..1.0 }.averageFiniteOrNull()?.let { alphaValues += it }
             }
             MuseDataPacketType.THETA_RELATIVE -> {
                 receivedSensorData = true
-                values.averageFiniteOrNull()?.let { thetaValues += it.coerceIn(0.0, 1.0) }
+                values.filter { it in 0.0..1.0 }.averageFiniteOrNull()?.let { thetaValues += it }
             }
             MuseDataPacketType.BETA_RELATIVE -> {
                 receivedSensorData = true
-                values.averageFiniteOrNull()?.let { betaValues += it.coerceIn(0.0, 1.0) }
+                values.filter { it in 0.0..1.0 }.averageFiniteOrNull()?.let { betaValues += it }
             }
             MuseDataPacketType.ACCELEROMETER -> {
                 if (values.size >= 3 && values.take(3).all { it.isFinite() }) {
@@ -74,7 +74,8 @@ class SignalProcessor(
         val sample = if (valid) {
             // Muse reports NaN for derived EEG bands during contact gaps. Keep
             // the visual stream alive from the fields that are available and
-            // carry the last finite value for a temporarily missing field.
+            // ease toward defaults for temporarily missing fields. The live EEG
+            // availability flag prevents those defaults from driving the galaxy.
             smoothedAlpha = smooth(smoothedAlpha, rawAlpha ?: DEFAULT_BAND)
             smoothedTheta = smooth(smoothedTheta, rawTheta ?: DEFAULT_BAND)
             smoothedBeta = smooth(smoothedBeta, rawBeta ?: DEFAULT_BAND)
@@ -86,6 +87,7 @@ class SignalProcessor(
                 beta = smoothedBeta,
                 stillness = smoothedStillness,
                 valid = true,
+                eegBandsAvailable = rawAlpha != null && rawTheta != null && rawBeta != null,
             )
         } else {
             // Keep the gap explicit only when no sensor callback arrived.

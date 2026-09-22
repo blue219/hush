@@ -18,6 +18,7 @@ class SignalProcessorTest {
         }
         val sample = processor.nextSample(1)
         assertTrue(sample.valid)
+        assertTrue(sample.eegBandsAvailable)
         assertTrue(sample.alpha!! in 0.49..0.51)
         assertTrue(sample.stillness!! > 0.99)
     }
@@ -33,5 +34,31 @@ class SignalProcessorTest {
     @Test
     fun noSensorPacketsProduceExplicitGap() {
         assertFalse(SignalProcessor().nextSample(1).valid)
+    }
+
+    @Test
+    fun liveBandAvailabilityDoesNotCarryAcrossSeconds() {
+        val processor = SignalProcessor()
+        processor.accept(MuseDataPacketType.ALPHA_RELATIVE, listOf(0.4))
+        processor.accept(MuseDataPacketType.THETA_RELATIVE, listOf(0.3))
+        processor.accept(MuseDataPacketType.BETA_RELATIVE, listOf(0.2))
+        assertTrue(processor.nextSample(1).eegBandsAvailable)
+        processor.accept(MuseDataPacketType.ALPHA_RELATIVE, listOf(0.4))
+        processor.accept(MuseDataPacketType.THETA_RELATIVE, listOf(0.3))
+        val partial = processor.nextSample(2)
+        assertTrue(partial.valid)
+        assertFalse(partial.eegBandsAvailable)
+        assertFalse(processor.nextSample(3).eegBandsAvailable)
+    }
+
+    @Test
+    fun nonFiniteAndOutOfRangeBandsAreNotMeasuredEeg() {
+        listOf(Double.NaN, Double.POSITIVE_INFINITY, -0.1, 1.1).forEach { invalid ->
+            val processor = SignalProcessor()
+            processor.accept(MuseDataPacketType.ALPHA_RELATIVE, listOf(0.4))
+            processor.accept(MuseDataPacketType.THETA_RELATIVE, listOf(0.3))
+            processor.accept(MuseDataPacketType.BETA_RELATIVE, listOf(invalid))
+            assertFalse(processor.nextSample(1).eegBandsAvailable)
+        }
     }
 }

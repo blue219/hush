@@ -8,7 +8,7 @@
 4. While the session is active, the foreground service continues timing, collection, and audio after the screen is locked. The session can be paused, ended early, and have its volume changed.
 5. After completion, open the History tab to inspect the result, Mindprint, relative trend chart, and draggable replay timeline.
 
-`adb` is not available in the current environment. Bluetooth, lock-screen, reconnect, and long-session checks must be run on a physical device with the Android SDK configured.
+Bluetooth, lock-screen, reconnect, and long-session checks must be run on a physical device with the Android SDK configured.
 
 ## Data meaning
 
@@ -38,3 +38,21 @@
 ## Audio
 
 `Mist` and `Tide` are locally generated original PCM ambient beds. They loop without network access or an account. They are session music only; pause, finish, and lock-screen behavior are coordinated by the foreground service.
+
+## Meditation galaxy
+
+Active sessions (connecting, running, or paused) use a full-screen 720-star spiral galaxy. App navigation and system bars are hidden; system bars can be revealed by swiping. Elapsed time, Pause/Resume, Finish, and a volume icon stay visible inside safe drawing insets. The volume icon expands a slider. Back dismisses the slider and never ends the session. The home, completion, and history visuals retain their existing behavior.
+
+The artistic mapping uses Beta / (Alpha + Theta + Beta): shares at or below 0.2 produce slow spiral rotation; shares at or above 0.6 produce maximum independent drift. Intermediate values interpolate continuously. This is not a validated measure of thoughts or meditation quality. Rising agitation has a 2.5-second exponential time constant; regrouping has a 4-second time constant. These are smoothing rates, not hard transition deadlines.
+
+`StateSample.eegBandsAvailable` is a live-only flag, defaulting to false. `SignalProcessor` sets it only when all three relative bands have finite measurements in the 0–1 range within the current second. Default-filled fields and stale samples from earlier seconds never establish availability; no database migration is needed. Historical samples keep the default flag and continue using their original renderer.
+
+Disconnected, missing, or unavailable EEG holds the galaxy shape and fades it to 25% brightness with a short status indicator. Recovered data resumes motion smoothly. Pause freezes the entire visual state. The frame coroutine runs only while the view lifecycle is STARTED; background timing, audio, and data collection remain service-owned. Resuming resets the frame timestamp rather than catching up missed time.
+
+### Focused validation
+
+Run `./gradlew :app:testDebugUnitTest --tests com.blue.hush.GalaxyMotionTest --tests com.blue.hush.SignalProcessorTest :app:compileDebugKotlin`.
+
+On a physical Android device, check calm → scattered → regrouped motion, signal loss/recovery, pause/resume, background/foreground, portrait/landscape, system-bar restoration, and volume/Back/Finish controls. Confirm readable controls at small screen sizes and larger font settings. Measure frame timing before claiming near-60 FPS; compilation and deterministic motion tests do not establish visual performance.
+
+The focused on-device UI test can be run with `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.blue.hush.MeditationGalaxyScreenTest`. It uses synthetic samples without starting a real meditation service, covers controls, frozen particles, signal messages, lifecycle resume, and landscape layout, and writes screenshots to the target app's external files directory. These checks do not validate a physical Muse signal or long-session frame pacing.
