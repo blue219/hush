@@ -1,0 +1,59 @@
+package com.blue.hush.session
+
+enum class SessionPhase {
+    IDLE,
+    CONNECTING,
+    RUNNING,
+    PAUSED,
+    FINISHED,
+}
+
+enum class MusicTrack(val title: String, val subtitle: String) {
+    MIST("Mist", "Soft low tones with a breathing texture"),
+    TIDE("Tide", "Slowly rising and falling dual tones"),
+}
+
+enum class ResultLabel(val title: String, val description: String) {
+    STEADY("Steady", "Your state changed only slightly during this session."),
+    SETTLING("Settling", "The second half was steadier than the first."),
+    VARIABLE("Variable", "Your state changed noticeably during this session."),
+    INSUFFICIENT("Insufficient data", "There was not enough valid sensor data to describe a trend."),
+}
+
+data class StateSample(
+    val elapsedSeconds: Int,
+    val alpha: Double? = null,
+    val theta: Double? = null,
+    val beta: Double? = null,
+    val stillness: Double? = null,
+    val valid: Boolean = false,
+)
+
+data class SessionSummary(
+    val id: Long,
+    val startedAt: Long,
+    val endedAt: Long,
+    val plannedSeconds: Int,
+    val actualSeconds: Int,
+    val track: MusicTrack,
+    val result: ResultLabel,
+    val sampleCount: Int,
+    val validSampleCount: Int,
+)
+
+data class SessionState(
+    val phase: SessionPhase = SessionPhase.IDLE,
+    val sessionId: Long? = null,
+    val plannedSeconds: Int = 20 * 60,
+    val elapsedSeconds: Int = 0,
+    val connected: Boolean = false,
+    val deviceName: String = "",
+    val dataGap: Boolean = false,
+    val validSampleCount: Int = 0,
+    val sampleCount: Int = 0,
+    val latestSample: StateSample? = null,
+    val track: MusicTrack = MusicTrack.MIST,
+    val volume: Float = 0.7f,
+    val result: ResultLabel? = null,
+    val message: String? = null,
+)

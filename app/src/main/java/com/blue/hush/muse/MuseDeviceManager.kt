@@ -135,9 +135,19 @@ class MuseDeviceManager(
         DATA_PACKET_TYPES.forEach { type ->
             muse.registerDataListener(dataListener, type)
         }
-        muse.setPreset(MusePreset.PRESET_21)
+        // Muse 2's PPG/optical channels are enabled by the PPG preset.
+        // PRESET_21 streams the core EEG/IMU channels but does not expose PPG.
+        muse.setPreset(MusePreset.PRESET_50)
         connectedMuse = muse
-        muse.runAsynchronously()
+        val currentState = muse.getConnectionState()
+        if (currentState == ConnectionState.CONNECTED) {
+            // A foreground service can claim the already-running Muse instance
+            // after the activity has selected it. Notify the new owner without
+            // forcing a disconnect/reconnect handoff.
+            listener.onConnectionStateChanged(device, currentState, currentState)
+        } else {
+            muse.runAsynchronously()
+        }
     }
 
     fun disconnect() {
@@ -163,8 +173,28 @@ class MuseDeviceManager(
     private companion object {
         val DATA_PACKET_TYPES = listOf(
             MuseDataPacketType.EEG,
+            MuseDataPacketType.GYRO,
             MuseDataPacketType.ALPHA_RELATIVE,
+            MuseDataPacketType.BETA_RELATIVE,
+            MuseDataPacketType.DELTA_RELATIVE,
+            MuseDataPacketType.THETA_RELATIVE,
+            MuseDataPacketType.GAMMA_RELATIVE,
+            MuseDataPacketType.ALPHA_ABSOLUTE,
+            MuseDataPacketType.BETA_ABSOLUTE,
+            MuseDataPacketType.DELTA_ABSOLUTE,
+            MuseDataPacketType.THETA_ABSOLUTE,
+            MuseDataPacketType.GAMMA_ABSOLUTE,
+            MuseDataPacketType.ALPHA_SCORE,
+            MuseDataPacketType.BETA_SCORE,
+            MuseDataPacketType.DELTA_SCORE,
+            MuseDataPacketType.THETA_SCORE,
+            MuseDataPacketType.GAMMA_SCORE,
             MuseDataPacketType.ACCELEROMETER,
+            MuseDataPacketType.PPG,
+            MuseDataPacketType.IS_PPG_GOOD,
+            MuseDataPacketType.IS_HEART_GOOD,
+            MuseDataPacketType.IS_GOOD,
+            MuseDataPacketType.HSI,
             MuseDataPacketType.HSI_PRECISION,
             MuseDataPacketType.BATTERY,
             MuseDataPacketType.ARTIFACTS,

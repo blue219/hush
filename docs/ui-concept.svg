@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="750" viewBox="0 0 1500 750" role="img" aria-label="Hush meditation app UI concept: meditation, completion, history, session detail, and music">
+  <defs>
+    <linearGradient id="background" x2="1" y2="1"><stop stop-color="#0B1220"/><stop offset="1" stop-color="#15243A"/></linearGradient>
+    <linearGradient id="particle" x2="1" y2="1"><stop stop-color="#A5E8D2"/><stop offset="0.5" stop-color="#9CC7EC"/><stop offset="1" stop-color="#C8ACEB"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#8CDACF" stop-opacity=".38"/><stop offset=".52" stop-color="#82ADD3" stop-opacity=".13"/><stop offset="1" stop-color="#82ADD3" stop-opacity="0"/></radialGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="10"/></filter>
+    <style>
+      text { font-family: "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; fill: #EAF2F3; }
+      .label { font-size: 16px; font-weight: 600; fill: #B9CBD3; letter-spacing: 1px; }
+      .title { font-size: 19px; font-weight: 600; }
+      .small { font-size: 11px; fill: #A9BDC6; }
+      .tiny { font-size: 9px; fill: #8FA4AF; }
+      .metric { font-size: 14px; font-weight: 600; }
+      .nav { font-size: 10px; fill: #829AA5; }
+      .active { fill: #A8E9D3; }
+    </style>
+  </defs>
+
+  <rect width="1500" height="750" fill="url(#background)"/>
+  <text x="45" y="48" font-size="26" font-weight="700">Hush</text>
+  <text x="130" y="48" font-size="16" fill="#A9BDC6">移动端界面布局草图</text>
+  <text x="45" y="82" class="small">3 个主模块 · 冥想完成后进入结果页 · 历史中回看单次数据与粒子变化</text>
+
+  <!-- Screen frames -->
+  <g fill="#101C2B" stroke="#3E5361" stroke-width="1.5">
+    <rect x="43" y="132" width="254" height="572" rx="30"/>
+    <rect x="333" y="132" width="254" height="572" rx="30"/>
+    <rect x="623" y="132" width="254" height="572" rx="30"/>
+    <rect x="913" y="132" width="254" height="572" rx="30"/>
+    <rect x="1203" y="132" width="254" height="572" rx="30"/>
+  </g>
+  <g class="label"><text x="43" y="119">01  冥想中</text><text x="333" y="119">02  完成页</text><text x="623" y="119">03  历史记录</text><text x="913" y="119">04  单次详情</text><text x="1203" y="119">05  音乐</text></g>
+  <g fill="#304353"><rect x="136" y="139" width="68" height="5" rx="3"/><rect x="426" y="139" width="68" height="5" rx="3"/><rect x="716" y="139" width="68" height="5" rx="3"/><rect x="1006" y="139" width="68" height="5" rx="3"/><rect x="1296" y="139" width="68" height="5" rx="3"/></g>
+
+  <!-- Meditation -->
+  <text x="66" y="181" class="title">正在冥想</text>
+  <circle cx="74" cy="205" r="4" fill="#A8E9D3"/><text x="85" y="209" class="small">Muse 已连接</text>
+  <path d="M262 177 L262 194 M254 180 L254 191 M270 180 L270 191" stroke="#B8D4D8" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="170" cy="342" r="105" fill="url(#glow)"/>
+  <circle cx="170" cy="342" r="62" fill="none" stroke="url(#particle)" stroke-opacity=".2" stroke-width="25" filter="url(#blur)"/>
+  <circle cx="170" cy="342" r="61" fill="none" stroke="url(#particle)" stroke-width="2" stroke-opacity=".62"/>
+  <path d="M105 339 C127 296 204 290 232 341 C247 380 195 402 157 390 C112 377 111 329 145 312" fill="none" stroke="url(#particle)" stroke-width="1.5" stroke-opacity=".5"/>
+  <g fill="#B6E8DB"><circle cx="106" cy="325" r="3"/><circle cx="121" cy="287" r="2"/><circle cx="144" cy="301" r="2.5"/><circle cx="160" cy="280" r="2"/><circle cx="192" cy="295" r="3"/><circle cx="225" cy="320" r="2.5"/><circle cx="231" cy="350" r="2"/><circle cx="204" cy="385" r="3"/><circle cx="173" cy="398" r="2"/><circle cx="132" cy="373" r="2.5"/><circle cx="114" cy="351" r="2"/><circle cx="190" cy="346" r="2"/><circle cx="153" cy="339" r="2"/></g>
+  <g fill="#C9B6ED"><circle cx="132" cy="311" r="2"/><circle cx="216" cy="361" r="2"/><circle cx="181" cy="307" r="1.8"/><circle cx="151" cy="389" r="1.8"/></g>
+  <text x="170" y="456" text-anchor="middle" font-size="34" font-weight="300">12:36</text>
+  <text x="170" y="479" text-anchor="middle" class="small">让呼吸自然流动</text>
+  <rect x="68" y="523" width="93" height="45" rx="22" fill="#233747"/><text x="114" y="551" text-anchor="middle" font-size="13">暂停</text>
+  <rect x="172" y="523" width="103" height="45" rx="22" fill="#B5E6D8"/><text x="223" y="551" text-anchor="middle" font-size="13" fill="#173039">结束</text>
+  <text x="170" y="601" text-anchor="middle" class="small">上滑查看实时趋势</text>
+
+  <!-- Completion -->
+  <text x="356" y="181" class="title">本次冥想</text>
+  <text x="356" y="207" class="small">今天  ·  20 分钟</text>
+  <circle cx="460" cy="333" r="91" fill="url(#glow)"/>
+  <circle cx="460" cy="333" r="62" fill="#1D3342" stroke="#9BDCCD" stroke-width="2"/>
+  <path d="M432 317 Q438 311 444 317 M476 317 Q482 311 488 317" fill="none" stroke="#CAEBDD" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M437 345 Q460 362 483 345" fill="none" stroke="#CAEBDD" stroke-width="2.5" stroke-linecap="round"/>
+  <text x="460" y="431" text-anchor="middle" font-size="19" font-weight="600">平稳而专注</text>
+  <text x="460" y="456" text-anchor="middle" class="small">后半段变化较小</text>
+  <rect x="354" y="484" width="212" height="61" rx="16" fill="#1A2A39"/>
+  <text x="378" y="508" class="tiny">相对稳定时段</text><text x="378" y="531" class="metric">12 分钟</text>
+  <text x="481" y="508" class="tiny">平均心率</text><text x="481" y="531" class="metric">68 bpm</text>
+  <rect x="354" y="574" width="212" height="45" rx="22" fill="#B5E6D8"/><text x="460" y="602" text-anchor="middle" font-size="13" fill="#173039">查看详情</text>
+  <text x="460" y="650" text-anchor="middle" class="small">完成</text>
+
+  <!-- History -->
+  <text x="646" y="181" class="title">历史记录</text>
+  <text x="646" y="207" class="small">你的每一次安静时刻</text>
+  <rect x="642" y="231" width="216" height="105" rx="17" fill="#1B2E3D"/>
+  <circle cx="690" cy="283" r="32" fill="url(#glow)"/><circle cx="690" cy="283" r="18" fill="none" stroke="#AFE5D6" stroke-width="1.7"/><circle cx="681" cy="273" r="2" fill="#BAEBDD"/><circle cx="703" cy="286" r="2" fill="#BAEBDD"/><circle cx="686" cy="299" r="2" fill="#BAEBDD"/>
+  <text x="729" y="265" font-size="13" font-weight="600">今天  07:30</text><text x="729" y="287" class="small">20 分钟 · 平稳</text><text x="729" y="311" class="tiny">查看回溯和分析  ›</text>
+  <rect x="642" y="349" width="216" height="95" rx="17" fill="#1B2E3D"/>
+  <circle cx="690" cy="396" r="30" fill="url(#glow)"/><circle cx="690" cy="396" r="17" fill="none" stroke="#B9B6E6" stroke-width="1.6"/><circle cx="684" cy="381" r="2" fill="#C9C5EC"/><circle cx="703" cy="402" r="2" fill="#C9C5EC"/>
+  <text x="729" y="379" font-size="13" font-weight="600">昨天  21:15</text><text x="729" y="401" class="small">15 分钟 · 渐入佳境</text><text x="729" y="425" class="tiny">查看回溯和分析  ›</text>
+  <rect x="642" y="457" width="216" height="95" rx="17" fill="#1B2E3D"/>
+  <circle cx="690" cy="504" r="30" fill="url(#glow)"/><circle cx="690" cy="504" r="17" fill="none" stroke="#A5CDE5" stroke-width="1.6"/><circle cx="682" cy="493" r="2" fill="#C2DCE9"/><circle cx="700" cy="513" r="2" fill="#C2DCE9"/>
+  <text x="729" y="487" font-size="13" font-weight="600">9 月 20 日  08:00</text><text x="729" y="509" class="small">10 分钟 · 略有波动</text><text x="729" y="533" class="tiny">查看回溯和分析  ›</text>
+
+  <!-- Detail -->
+  <text x="936" y="181" class="title">‹  本次冥想</text>
+  <text x="936" y="205" class="small">今天 07:30  ·  20 分钟</text>
+  <rect x="932" y="225" width="216" height="170" rx="17" fill="#1B2E3D"/>
+  <circle cx="1040" cy="298" r="68" fill="url(#glow)"/>
+  <ellipse cx="1040" cy="299" rx="48" ry="32" fill="none" stroke="url(#particle)" stroke-width="2"/>
+  <path d="M1001 311 Q1024 264 1063 284 Q1098 304 1062 330 Q1031 346 1006 316" fill="none" stroke="#ABDCCF" stroke-opacity=".5"/>
+  <g fill="#B8E5D8"><circle cx="999" cy="301" r="2.5"/><circle cx="1017" cy="274" r="2"/><circle cx="1049" cy="270" r="2"/><circle cx="1083" cy="292" r="2.5"/><circle cx="1077" cy="322" r="2"/><circle cx="1040" cy="337" r="2.5"/><circle cx="1014" cy="321" r="2"/></g>
+  <text x="950" y="373" font-size="13">▶</text><line x1="976" y1="369" x2="1127" y2="369" stroke="#607785" stroke-width="3" stroke-linecap="round"/><line x1="976" y1="369" x2="1034" y2="369" stroke="#A8E9D3" stroke-width="3" stroke-linecap="round"/><circle cx="1034" cy="369" r="5" fill="#A8E9D3"/>
+  <text x="932" y="425" font-size="14" font-weight="600">状态趋势</text>
+  <rect x="932" y="438" width="216" height="132" rx="15" fill="#1B2E3D"/>
+  <g stroke="#385365" stroke-width=".7"><line x1="950" y1="466" x2="1131" y2="466"/><line x1="950" y1="495" x2="1131" y2="495"/><line x1="950" y1="524" x2="1131" y2="524"/></g>
+  <polyline points="950,518 967,505 984,512 1001,491 1018,502 1035,481 1052,489 1069,470 1086,481 1103,460 1130,466" fill="none" stroke="#A8E9D3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="950,493 967,487 984,495 1001,482 1018,489 1035,502 1052,491 1069,498 1086,484 1103,493 1130,481" fill="none" stroke="#B9AEE6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="950" y="555" class="tiny">开始</text><text x="1110" y="555" class="tiny">结束</text>
+  <circle cx="945" cy="590" r="3" fill="#A8E9D3"/><text x="953" y="594" class="tiny">相对趋势</text><circle cx="1028" cy="590" r="3" fill="#B9AEE6"/><text x="1036" y="594" class="tiny">身体活动</text>
+  <text x="932" y="626" class="small">大部分时间保持稳定</text>
+
+  <!-- Music -->
+  <text x="1226" y="181" class="title">音乐</text>
+  <text x="1226" y="207" class="small">选择陪伴你的声音</text>
+  <rect x="1222" y="232" width="216" height="195" rx="18" fill="#24384B"/>
+  <circle cx="1330" cy="311" r="61" fill="url(#glow)"/>
+  <circle cx="1330" cy="311" r="38" fill="none" stroke="#A9DCCA" stroke-width="1.2"/>
+  <circle cx="1330" cy="311" r="25" fill="none" stroke="#B8A9E5" stroke-width="1.2"/>
+  <circle cx="1330" cy="311" r="11" fill="#93CDBF" fill-opacity=".7"/>
+  <text x="1241" y="390" font-size="14" font-weight="600">深海呼吸</text><text x="1241" y="411" class="small">柔和环境音 · 20 分钟</text>
+  <text x="1224" y="456" class="small">为你推荐</text>
+  <rect x="1222" y="471" width="216" height="58" rx="13" fill="#1B2E3D"/>
+  <circle cx="1251" cy="500" r="17" fill="#385B65"/><path d="M1241 501 Q1251 489 1261 501" fill="none" stroke="#A8E9D3" stroke-width="1.5"/><text x="1280" y="495" font-size="12">林间雨声</text><text x="1280" y="514" class="tiny">自然声音 · 30 分钟</text>
+  <rect x="1222" y="538" width="216" height="58" rx="13" fill="#1B2E3D"/>
+  <circle cx="1251" cy="567" r="17" fill="#4A4B68"/><path d="M1243 571 Q1251 554 1259 571" fill="none" stroke="#C8B9E9" stroke-width="1.5"/><text x="1280" y="562" font-size="12">夜晚微光</text><text x="1280" y="581" class="tiny">舒缓旋律 · 15 分钟</text>
+  <rect x="1222" y="612" width="216" height="42" rx="13" fill="#294458"/>
+  <text x="1236" y="638" font-size="11">深海呼吸</text><text x="1400" y="638" font-size="15">Ⅱ</text>
+
+  <!-- Bottom navigation on top-level screens -->
+  <g stroke="#304655" stroke-width="1"><line x1="61" y1="630" x2="279" y2="630"/><line x1="641" y1="630" x2="859" y2="630"/><line x1="1221" y1="666" x2="1439" y2="666"/></g>
+  <g class="nav" text-anchor="middle"><text x="93" y="659" class="active">冥想</text><text x="170" y="659">历史</text><text x="247" y="659">音乐</text><text x="673" y="659">冥想</text><text x="750" y="659" class="active">历史</text><text x="827" y="659">音乐</text><text x="1253" y="692">冥想</text><text x="1330" y="692">历史</text><text x="1407" y="692" class="active">音乐</text></g>
+
+  <text x="45" y="732" class="small">概念草图 · 粒子和图表为示意数据，具体指标与表情规则需在信号处理实现后确定</text>
+</svg>
