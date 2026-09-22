@@ -21,10 +21,11 @@ import com.blue.hush.ui.theme.HushShapes
 import com.blue.hush.ui.theme.HushSpace
 
 @Composable
-internal fun HushPanel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun HushPanel(modifier: Modifier = Modifier, compact: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     Surface(modifier.animateContentSize(tween(HushMotion.TransitionMillis)), shape = HushShapes.Panel, color = HushColors.Surface.copy(alpha = 0.92f),
         border = BorderStroke(1.dp, HushColors.Border.copy(alpha = 0.65f))) {
-        Column(Modifier.padding(HushSpace.lg), verticalArrangement = Arrangement.spacedBy(HushSpace.md), content = content)
+        Column(Modifier.padding(if (compact) HushSpace.md else HushSpace.lg),
+            verticalArrangement = Arrangement.spacedBy(if (compact) HushSpace.xs else HushSpace.md), content = content)
     }
 }
 @Composable

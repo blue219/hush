@@ -2,7 +2,7 @@
 
 ## Direction
 
-Use the blue-black, blue/lavender light, fine borders and quiet typography from `ui-concept.png`. Keep the Hush brand and English copy. The existing live particle renderer remains the visual system; the reference's scores, photorealistic nebulae and extra navigation are not product features.
+Use the blue-black, blue/lavender light, fine borders and quiet typography from `ui-concept.png`. Keep the Hush brand and English copy. The existing live particle renderer remains the visual system; the reference's scores and extra navigation are not product features. Procedural blue/lavender nebula wisps and dark dust add depth to the shared galaxy without image assets.
 
 ## Tokens
 
@@ -16,11 +16,11 @@ Typography uses the system sans-serif: Light titles/countdown, Regular body and 
 
 - `HushPanel`: translucent dark surface, thin border, consistent padding and animated content size.
 - `PrimaryAction`: full-width capsule with a minimum 52dp height. Icon controls retain a minimum 48dp touch target.
-- Home: brand/device status, particle field and a compact preparation panel. Start is gated by a real connection or a usable simulation.
+- Home: brand/device status, a width-responsive square galaxy area capped at 440dp high, and a compact preparation panel. All galaxy views use a radius of 43% of the canvas's smaller dimension; the subtitle and panel spacing are reduced while action touch targets remain unchanged. The page scrolls on constrained screens. Start is gated by a real connection or a usable simulation.
 - Device sheet: permission, Bluetooth, connection state, device selection, disconnect and simulation. No raw packet counters in the user flow.
 - Soundscape sheet: selection and preview. Dismissal, backgrounding and session start stop preview audio.
 - Session: remaining time, circular Pause/Resume, volume and confirmed Finish. Landscape separates controls from the galaxy; constrained controls scroll.
-- Completion: actual duration, Mindprint and existing relative-trend classification, with no assessment when fewer than two valid samples exist.
+- Completion: actual duration, Mindprint and existing relative-trend classification, with no assessment when fewer than two valid samples exist. Completion and history detail share the width-responsive galaxy panel capped at 440dp high, matching Home's sizing rule.
 - History/detail: saved sessions, particle replay and labeled relative trends with gaps. Small history star emblems are decorative session identifiers, not physiological measurements; the detail visualization uses recorded samples.
 
 Reusable controls live in `HushComponents`. Route composition is in `HushApp`; charts and particle summaries are in `SessionVisuals`. Activity code coordinates permissions, idle connection, service events and storage. Do not introduce signal processing into composables or let a hidden Home route claim a service-owned Muse.
@@ -32,3 +32,5 @@ Use safe system insets, bounded content widths, scrollable content, semantic nam
 ## Limits
 
 No calm/focus scores or medical interpretation are introduced. No database migration is required. Device addresses remain local preferences. Frame-rate and Bluetooth reliability claims require measurement on a physical target device.
+
+All main particle views use GalaxyParticleField and its fixed seed, palette, glow, and trails. Home and live meditation share motion state with the frozen completion Mindprint; recorded detail frames use the same renderer. HomeParticleField and the former static ring renderer are removed.

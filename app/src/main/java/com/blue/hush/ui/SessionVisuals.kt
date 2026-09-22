@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -14,27 +15,18 @@ import com.blue.hush.session.StateSample
 import com.blue.hush.ui.theme.HushColors
 
 @Composable
-internal fun ParticlePanel(sample: StateSample?, dataGap: Boolean) {
+internal fun ParticlePanel(
+    sample: StateSample?, dataGap: Boolean, motion: GalaxyMotion? = null,
+) {
+    // Persisted valid rows contain measured bands but no live availability flag.
+    val recordedSample = sample?.copy(eegBandsAvailable = sample.valid)
+    val visual = motion ?: remember(recordedSample) {
+        GalaxyMotion().apply { showRecordedSample(recordedSample) }
+    }
     Card(shape = com.blue.hush.ui.theme.HushShapes.Panel) {
-        Box(Modifier.fillMaxWidth().height(280.dp), contentAlignment = Alignment.Center) {
-            Canvas(Modifier.fillMaxSize()) {
-                val center = Offset(size.width / 2f, size.height / 2f)
-                val alpha = sample?.alpha?.toFloat() ?: 0.2f
-                val theta = sample?.theta?.toFloat() ?: 0.2f
-                val beta = sample?.beta?.toFloat() ?: 0.2f
-                val stillness = sample?.stillness?.toFloat() ?: 0f
-                val radius = 42f + stillness * 38f
-                for (index in 0 until 72) {
-                    val angle = index * 0.47f + alpha * 2.4f
-                    val distance = radius + (index % 9) * (8f + theta * 10f) + beta * 12f
-                    val x = center.x + kotlin.math.cos(angle.toDouble()).toFloat() * distance
-                    val y = center.y + kotlin.math.sin(angle.toDouble()).toFloat() * distance
-                    val color = androidx.compose.ui.graphics.lerp(HushColors.Star, HushColors.Lavender,
-                        theta.coerceIn(0f, 1f)).copy(alpha = if (sample?.valid == true) 0.72f else 0.18f)
-                    drawCircle(color, radius = 2.2f + (index % 3), center = Offset(x, y))
-                }
-                drawCircle(HushColors.Accent.copy(alpha = if (sample?.valid == true) 0.18f else 0.08f), radius = radius, center = center, style = Stroke(width = 18f))
-            }
+        Box(Modifier.fillMaxWidth().heightIn(max = 440.dp).aspectRatio(1f), contentAlignment = Alignment.Center) {
+            GalaxyParticleField(recordedSample, dataGap, paused = true,
+                modifier = Modifier.fillMaxSize(), state = visual)
             if (dataGap) Text("Data gap", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -63,7 +55,6 @@ internal fun TrendChart(samples: List<StateSample>) {
         }
     }
 }
-
 
 @Composable
 internal fun HushNavIcon(tab: AppTab) {

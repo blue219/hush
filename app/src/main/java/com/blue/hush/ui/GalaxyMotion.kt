@@ -22,6 +22,13 @@ internal class GalaxyMotion(phase: Float = 0f, agitation: Float = 0f, visibility
     var visibility = visibility
         private set
 
+    fun showRecordedSample(sample: StateSample?) {
+        val target = galaxyAgitation(sample)
+        phase = (sample?.elapsedSeconds ?: 0) * 0.07f
+        agitation = target ?: 0f
+        visibility = if (target == null) 0.25f else 1f
+    }
+
     fun advance(seconds: Float, target: Float?) {
         // Do not catch up missed frames after a stall or background interval.
         val dt = seconds.coerceIn(0f, 0.05f)

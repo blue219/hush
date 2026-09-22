@@ -9,6 +9,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GalaxyMotionTest {
+    @Test fun recordedFramesAreDeterministicAndRejectMissingBands() {
+        val motion = GalaxyMotion()
+        val recorded = StateSample(120, 0.3, 0.3, 0.4, valid = true, eegBandsAvailable = true)
+        motion.showRecordedSample(recorded)
+        assertEquals(8.4f, motion.phase, 0.0001f)
+        assertEquals(0.5f, motion.agitation, 0.0001f)
+        assertEquals(1f, motion.visibility, 0f)
+        motion.showRecordedSample(recorded.copy(alpha = null))
+        assertEquals(0.25f, motion.visibility, 0f)
+        motion.showRecordedSample(recorded)
+        assertEquals(8.4f, motion.phase, 0.0001f)
+        assertEquals(0.5f, motion.agitation, 0.0001f)
+    }
+
     private fun sample(beta: Double) = StateSample(
         1, alpha = (1 - beta) / 2, theta = (1 - beta) / 2, beta = beta,
         valid = true, eegBandsAvailable = true,

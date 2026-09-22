@@ -53,12 +53,13 @@ import com.blue.hush.session.SessionPhase
 import com.blue.hush.session.SessionState
 
 @Composable
-fun MeditationGalaxyScreen(
+internal fun MeditationGalaxyScreen(
     state: SessionState,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onFinish: () -> Unit,
     onVolumeChanged: (Float) -> Unit,
+    galaxyMotion: GalaxyMotion = rememberGalaxyMotion(),
 ) {
     var volumeExpanded by rememberSaveable { mutableStateOf(false) }
     var confirmFinish by rememberSaveable { mutableStateOf(false) }
@@ -95,7 +96,7 @@ fun MeditationGalaxyScreen(
     BoxWithConstraints(Modifier.fillMaxSize().background(HushColors.Background).safeDrawingPadding()) {
         val landscape = maxWidth > maxHeight
         GalaxyParticleField(state.latestSample, signalMissing, paused,
-            Modifier.fillMaxHeight().fillMaxWidth(if (landscape) 0.58f else 1f).align(Alignment.CenterStart))
+            Modifier.fillMaxHeight().fillMaxWidth(if (landscape) 0.58f else 1f).align(Alignment.CenterStart), state = galaxyMotion)
         Column(Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = HushSpace.xl, vertical = HushSpace.md)) {
             Row(
                 Modifier.fillMaxWidth(),

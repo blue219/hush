@@ -75,8 +75,9 @@ fun HushApp(
 ) {
     var deviceSheet by rememberSaveable { mutableStateOf(false) }
     var musicSheet by rememberSaveable { mutableStateOf(false) }
+    val galaxyMotion = rememberGalaxyMotion()
     if (sessionState.phase in listOf(SessionPhase.CONNECTING, SessionPhase.RUNNING, SessionPhase.PAUSED)) {
-        MeditationGalaxyScreen(sessionState, onPause, onResume, onFinish, onVolumeChanged)
+        MeditationGalaxyScreen(sessionState, onPause, onResume, onFinish, onVolumeChanged, galaxyMotion)
         return
     }
     if (detailSummary != null) {
@@ -87,7 +88,7 @@ fun HushApp(
         Page("Session complete", onStartNewSession) {
             LazyColumn(Modifier.widthIn(max = HushSpace.contentWidth).fillMaxSize(), contentPadding = PaddingValues(HushSpace.xl), verticalArrangement = Arrangement.spacedBy(HushSpace.xl)) {
                 item { Text("Your Mindprint", style = MaterialTheme.typography.headlineMedium) }
-                item { ParticlePanel(sessionState.latestSample, sessionState.latestSample?.valid != true) }
+                item { ParticlePanel(sessionState.latestSample, sessionState.latestSample?.valid != true, galaxyMotion) }
                 item { HushPanel(Modifier.fillMaxWidth()) {
                     Text(formatDuration(sessionState.elapsedSeconds), style = MaterialTheme.typography.displayLarge)
                     Text(if (sessionState.validSampleCount >= 2) sessionState.result?.title ?: "Session saved" else "Not enough signal", style = MaterialTheme.typography.titleLarge)
@@ -107,21 +108,21 @@ fun HushApp(
     }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             if (activeTab == AppTab.MEDITATE) {
-                LazyColumn(Modifier.widthIn(max = HushSpace.contentWidth).fillMaxSize(), contentPadding = PaddingValues(HushSpace.xl), verticalArrangement = Arrangement.spacedBy(HushSpace.lg)) {
+                LazyColumn(Modifier.widthIn(max = HushSpace.contentWidth).fillMaxSize(), contentPadding = PaddingValues(horizontal = HushSpace.lg, vertical = HushSpace.sm), verticalArrangement = Arrangement.spacedBy(HushSpace.sm)) {
                     item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Hush", style = MaterialTheme.typography.headlineLarge)
                         TextButton(onClick = { deviceSheet = true }) { Text(if (connectionState.ready) connectionState.status else "Muse 2") }
                     } }
-                    item { HomeParticleField() }
-                    item { Text("A moment of stillness", style = MaterialTheme.typography.headlineMedium) }
-                    item { HushPanel(Modifier.fillMaxWidth()) {
+                    item { GalaxyParticleField(null, dataGap = false, paused = false,
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 440.dp).aspectRatio(1f), state = galaxyMotion, preview = true) }
+                    item { Text("A moment of stillness", style = MaterialTheme.typography.titleMedium) }
+                    item { HushPanel(Modifier.fillMaxWidth(), compact = true) {
                         Text("DURATION", style = MaterialTheme.typography.labelSmall, color = HushColors.Muted)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(HushSpace.sm)) {
                             listOf(10, 20, 30).forEach { minutes -> FilterChip(selected = selectedDurationSeconds == minutes * 60,
                                 onClick = { onDurationSelected(minutes * 60) }, enabled = !connectionState.simulationMode || minutes == 10,
                                 label = { Text("$minutes min") }, modifier = Modifier.weight(1f)) }
                         }
-                        HorizontalDivider(color = HushColors.Border)
                         TextButton(onClick = { musicSheet = true }, modifier = Modifier.fillMaxWidth()) { Text("Soundscape · ${selectedTrack.title}") }
                         Text(connectionState.status, style = MaterialTheme.typography.bodySmall, color = HushColors.Muted)
                         PrimaryAction(if (connectionState.ready) "Start meditation" else "Connect Muse", {
