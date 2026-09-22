@@ -13,28 +13,26 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
-import com.blue.hush.R
 import com.blue.hush.audio.AmbientAudioEngine
 import com.blue.hush.muse.MuseDeviceManager
 import com.blue.hush.processing.SessionResultClassifier
 import com.blue.hush.processing.SignalProcessor
 import com.blue.hush.replay.MuseReplaySource
 import com.blue.hush.session.MusicTrack
-import com.blue.hush.session.ResultLabel
 import com.blue.hush.session.SessionClock
 import com.blue.hush.session.SessionPhase
 import com.blue.hush.session.SessionRuntime
 import com.blue.hush.session.SessionState
+import com.blue.hush.session.SessionSamples
 import com.blue.hush.session.StateSample
 import com.blue.hush.storage.HushDatabase
 import com.choosemuse.libmuse.ConnectionState
-import com.choosemuse.libmuse.MuseDataPacketType
 
 class MeditationService : Service(), MuseDeviceManager.Listener {
     private val handler = Handler(Looper.getMainLooper())
     private val clock = SessionClock()
     private val processor = SignalProcessor()
-    private val samples = mutableListOf<StateSample>()
+    private val samples = SessionSamples()
     private lateinit var database: HushDatabase
     private var museManager: MuseDeviceManager? = null
     private var audioEngine: AmbientAudioEngine? = null
@@ -44,10 +42,8 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
     private var plannedSeconds = 20 * 60
     private var selectedTrack = MusicTrack.MIST
     private var currentVolume = 0.7f
-    private var lastSavedSecond = 0
     private var isConnecting = false
     private var currentState = SessionState()
-    private var latestValidSample: StateSample? = null
     private var simulationMode = false
     private var replaySamples: List<StateSample> = emptyList()
 
@@ -55,20 +51,18 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
         override fun run() {
             if (currentState.phase == SessionPhase.RUNNING) {
                 val elapsedSeconds = (clock.elapsedMillis(SystemClock.elapsedRealtime()) / 1_000L).toInt()
-                if (elapsedSeconds > lastSavedSecond) {
+                if (elapsedSeconds > samples.lastSecond) {
                     val sample = if (simulationMode) replaySampleAt(elapsedSeconds) else processor.nextSample(elapsedSeconds)
-                    sessionId?.let { database.insertSample(it, sample) }
-                    samples += sample
-                    if (sample.valid) latestValidSample = sample
-                    lastSavedSecond = elapsedSeconds
+                    val newSamples = samples.record(sample)
+                    sessionId?.let { id -> newSamples.forEach { database.insertSample(id, it) } }
                     publish(
                         currentState.copy(
                             elapsedSeconds = elapsedSeconds,
                             dataGap = !currentState.connected || !sample.valid,
-                            sampleCount = samples.size,
-                            validSampleCount = samples.count { it.valid },
+                            sampleCount = samples.count,
+                            validSampleCount = samples.validCount,
                             // Keep the last valid visual state visible while a signal gap is shown.
-                            latestSample = latestValidSample ?: sample,
+                            latestSample = samples.visualSample,
                             message = if (sample.valid) null else "Not enough valid sensor data for this second",
                         ),
                     )
@@ -188,8 +182,6 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
         currentVolume = intent.getFloatExtra(EXTRA_VOLUME, 0.7f).coerceIn(0f, 1f)
         sessionId = database.insertSession(System.currentTimeMillis(), plannedSeconds, selectedTrack)
         samples.clear()
-        latestValidSample = null
-        lastSavedSecond = 0
         clock.start(SystemClock.elapsedRealtime())
         audioEngine = AmbientAudioEngine().also {
             it.setVolume(currentVolume)
@@ -237,7 +229,7 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
     private fun finishSession() {
         val id = sessionId ?: return
         val elapsedSeconds = (clock.elapsedMillis(SystemClock.elapsedRealtime()) / 1_000L).toInt()
-        val result = SessionResultClassifier.classify(samples)
+        val result = SessionResultClassifier.classify(samples.all)
         database.finishSession(id, System.currentTimeMillis(), elapsedSeconds, result)
         clock.pause(SystemClock.elapsedRealtime())
         publish(
@@ -265,7 +257,7 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
     }
 
     private fun replaySampleAt(elapsedSeconds: Int): StateSample =
-        replaySamples.firstOrNull { it.elapsedSeconds == elapsedSeconds }
+        replaySamples.getOrNull(elapsedSeconds - 1)
             ?: StateSample(elapsedSeconds = elapsedSeconds)
 
     private fun startAsForeground(simulated: Boolean) {

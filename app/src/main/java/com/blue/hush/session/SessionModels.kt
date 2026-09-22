@@ -1,5 +1,7 @@
 package com.blue.hush.session
 
+const val BUNDLED_SIMULATION_SESSION_ID = -1L
+
 enum class SessionPhase {
     IDLE,
     CONNECTING,
@@ -40,7 +42,9 @@ data class SessionSummary(
     val result: ResultLabel,
     val sampleCount: Int,
     val validSampleCount: Int,
-)
+) {
+    val isBundledSimulation: Boolean get() = id == BUNDLED_SIMULATION_SESSION_ID
+}
 
 data class SessionState(
     val phase: SessionPhase = SessionPhase.IDLE,

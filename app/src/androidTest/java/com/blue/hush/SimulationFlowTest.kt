@@ -14,15 +14,18 @@ class SimulationFlowTest {
 
     @Test fun simulationCanStartPauseFinishAndOpenSavedDetails() {
         try {
+            // The Home preview is animated before the service starts.
+            compose.mainClock.autoAdvance = false
             compose.onNodeWithText("Muse 2").performClick()
+            compose.mainClock.advanceTimeBy(500)
             compose.waitUntil(5000) {
                 compose.onAllNodesWithContentDescription("Use saved simulation data").fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithContentDescription("Use saved simulation data").performScrollTo().performClick()
             androidx.test.espresso.Espresso.pressBack()
+            compose.mainClock.advanceTimeBy(500)
             compose.onNodeWithText("Start meditation").performScrollTo().performClick()
             // The live frame loop intentionally never idles; advance the render clock explicitly.
-            compose.mainClock.autoAdvance = false
             compose.waitUntil(10000) { SessionRuntime.current.elapsedSeconds >= 3 }
             compose.mainClock.advanceTimeByFrame()
             compose.onNodeWithContentDescription("Pause").performClick()

@@ -6,7 +6,7 @@
 2. On Home, tap `Connect Muse` to grant permission. While Home is visible, Hush discovers and automatically connects the remembered Muse. On first use, one discovered device connects automatically; multiple devices require a selection in the device sheet.
 3. Choose 10, 20, or 30 minutes and select/preview Mist or Tide from the soundscape sheet. Tap `Start meditation` after connection.
 4. The full-screen session shows remaining time, Pause/Resume, volume, and Finish. Finish or Back opens a confirmation; Back first dismisses an open volume panel. Confirming ends and saves the session. Dismissing confirmation does not change its running/paused state.
-5. Completion opens a separate summary. History contains saved sessions, relative trends and a draggable replay. Home and History are the only navigation tabs.
+5. Completion opens a separate summary. History starts with the bundled `Saved simulation` as its oldest entry, then shows completed sessions, relative trends and a draggable replay. Home and History are the only navigation tabs.
 
 Discovery stops when Home is hidden, the app goes into the background, a connection starts, or simulation is enabled. Existing connections remain alive when merely leaving Home. Active sessions are service-owned and may reconnect the original Muse in the background. A remembered device is never silently replaced by another nearby device. Connection failures retry after 2, 4, 8, 16, then 30 seconds; connection attempts time out after 20 seconds. Device selection waits 1.5 seconds for discovery results. Native callback generations prevent disposed managers from publishing into a new connection attempt.
 
@@ -17,7 +17,7 @@ Bluetooth, lock-screen, reconnect, and long-session checks must be run on a phys
 ## Data meaning
 
 - Alpha, Theta, and Beta relative power plus acceleration are aggregated once per second by `SignalProcessor` and smoothed with EMA.
-- If `IS_GOOD` is false, or a required band/acceleration stream is missing, that second is stored as an invalid sample. Null values mean a data gap; the previous state is not copied forward.
+- A second with no sensor callback is stored as an invalid sample with null values. When some sensor data arrives but a band or acceleration is missing, the processor smooths toward a default for that field. The live-only EEG availability flag prevents default bands from driving galaxy motion.
 - Stillness describes the relative trend of acceleration near 1 g. Alpha, Theta, and Beta remain relative-power trends. None of these values is a medical metric or an absolute quality score.
 - Raw EEG, PPG, and IMU packets are not stored. PPG remains registered by the Muse adapter for later processing; heart-rate extraction is deferred.
 
@@ -25,9 +25,12 @@ Bluetooth, lock-screen, reconnect, and long-session checks must be run on a phys
 
 - `MuseDeviceManager`: LibMuse scanning, connection, and raw callback adapter.
 - `MeditationService`: `connectedDevice|mediaPlayback` foreground service; owns the Muse adapter, monotonic timer, reconnect scan, and ambient audio.
-- `SignalProcessor`: pure processing boundary from raw packets to per-second `StateSample` values.
+- `SignalProcessor`: packet aggregation and smoothing into per-second `StateSample` values.
+- `SessionSamples`: continuous second-by-second sequence, valid count, and last valid visual sample; delayed ticks create explicit invalid rows for skipped seconds.
 - `HushDatabase`: SQLite session metadata and per-second downsampled samples; excluded from cloud backup and device transfer.
 - Compose: consumes processed per-second values for particles, relative trends, completion, and replay.
+
+See [architecture](architecture.md) for ownership and the live/simulation data flow.
 
 ## Physical-device acceptance checklist
 
@@ -63,9 +66,11 @@ The focused on-device UI test can be run with `./gradlew :app:connectedDebugAndr
 
 ## Saved simulation data
 
-The Home device sheet includes `Try a simulation` (accessibility label: `Use saved simulation data`). It replays the checked-in ten-minute sample at `app/src/main/assets/simulation/muse_last_10m.csv` through the same foreground-session state path used by a live Muse connection. The file was exported from the latest complete ten-minute session available on the development phone; it contains 600 valid one-second samples and no device identifiers or timestamps.
+The Home device sheet includes `Try a simulation` (accessibility label: `Use saved simulation data`). It replays the checked-in ten-minute sample at `app/src/main/assets/simulation/muse_last_10m.csv` through the same foreground-session state path used by a live Muse connection. The file was exported from the latest complete ten-minute session available on the development phone; it contains 600 valid one-second samples and no device identifiers or timestamps. On first load, the same samples are imported once into local History as its oldest entry. That entry is labeled `Saved simulation`; its synthetic timestamp and placeholder track are hidden. Running a simulation later saves a separate session.
 
-Enabling simulation stops discovery and disconnects the idle Muse. Simulation mode does not scan Bluetooth, always uses the ten-minute duration, plays the selected soundscape, and saves the replay as a normal local session. If the asset is missing or malformed, the option remains unavailable and the real Muse connection path is unchanged.
+Enabling simulation stops discovery and disconnects the idle Muse. Simulation mode does not scan Bluetooth, always uses the ten-minute duration, plays the selected soundscape, and saves the replay as a normal local session. The asset must contain one valid, finite sample for every second from 1 to 600. If it is missing or malformed, the option remains unavailable and the real Muse connection path is unchanged.
+
+The focused database test `./gradlew :app:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=com.blue.hush.BundledSimulationHistoryTest'` checks that the preloaded record is imported once, is older than existing sessions, and has all 600 samples. Set `ANDROID_SERIAL` when multiple devices are connected.
 
 ## UI validation
 
@@ -73,7 +78,7 @@ The visual system and component conventions are in [Design system](design-system
 
 Run focused unit checks with `./gradlew :app:testDebugUnitTest --tests com.blue.hush.AutoConnectPolicyTest --tests com.blue.hush.GalaxyMotionTest --tests com.blue.hush.SignalProcessorTest :app:compileDebugKotlin`.
 
-Run UI checks against an already running device with `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.blue.hush.MeditationGalaxyScreenTest,com.blue.hush.HushAppScreenTest,com.blue.hush.SimulationFlowTest` (set `ANDROID_SERIAL` when multiple devices are connected). They cover confirmation, countdown, pause, signal loss, landscape controls, simulation selection, soundscape dismissal, empty history, completion without signal, and large text. Screenshots are written to the app external files directory. The simulation integration test starts the real media-only foreground service without Bluetooth permission, pauses, saves and opens replay. Bluetooth discovery, remembered-device selection, background reconnection, and sustained frame pacing still require physical-device verification.
+Run UI checks against an already running device with `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.blue.hush.MeditationGalaxyScreenTest,com.blue.hush.HushAppScreenTest,com.blue.hush.SimulationFlowTest` (set `ANDROID_SERIAL` when multiple devices are connected). They cover confirmation, countdown, pause, signal loss, landscape controls, simulation selection, soundscape dismissal, the isolated empty-history component state, completion without signal, and large text. Screenshots are written to the app external files directory. The simulation integration test starts the real media-only foreground service without Bluetooth permission, pauses, saves and opens replay. Bluetooth discovery, remembered-device selection, background reconnection, and sustained frame pacing still require physical-device verification.
 
 Simulation uses only the media-playback foreground-service type; live Muse sessions also use connected-device. This allows the simulation entry point to work without Bluetooth permission.
 

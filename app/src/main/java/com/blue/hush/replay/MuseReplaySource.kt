@@ -21,8 +21,12 @@ object MuseReplaySource {
     }.getOrDefault(emptyList())
 
     fun isUsable(samples: List<StateSample>): Boolean =
-        samples.size >= MIN_SAMPLE_COUNT &&
-            samples.take(MIN_SAMPLE_COUNT).lastOrNull()?.elapsedSeconds == DURATION_SECONDS
+        samples.size == MIN_SAMPLE_COUNT &&
+            samples.withIndex().all { (index, sample) ->
+                sample.elapsedSeconds == index + 1 && sample.valid &&
+                    listOf(sample.alpha, sample.theta, sample.beta, sample.stillness)
+                        .all { it != null && it.isFinite() && it in 0.0..1.0 }
+            }
 
     private fun parseLine(line: String): StateSample? {
         val columns = line.split(',')

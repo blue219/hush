@@ -181,8 +181,8 @@ private fun HistoryScreen(history: List<SessionSummary>, onOpen: (SessionSummary
                 Row(Modifier.fillMaxWidth().padding(HushSpace.lg), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(HushSpace.lg)) {
                     MindprintThumbnail(summary.id, Modifier.size(56.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(HushSpace.xs)) {
-                        Text(formatDate(summary.startedAt), style = MaterialTheme.typography.titleMedium)
-                        Text("${formatDuration(summary.actualSeconds)} · ${summary.track.title}", color = HushColors.Muted, style = MaterialTheme.typography.bodySmall)
+                        Text(if (summary.isBundledSimulation) "Saved simulation" else formatDate(summary.startedAt), style = MaterialTheme.typography.titleMedium)
+                        Text(if (summary.isBundledSimulation) formatDuration(summary.actualSeconds) else "${formatDuration(summary.actualSeconds)} · ${summary.track.title}", color = HushColors.Muted, style = MaterialTheme.typography.bodySmall)
                         Text(if (summary.validSampleCount >= 2) summary.result.title else "Not enough signal", style = MaterialTheme.typography.labelSmall)
                     }
                 }
@@ -194,9 +194,12 @@ private fun HistoryScreen(history: List<SessionSummary>, onOpen: (SessionSummary
 private fun SessionDetailScreen(summary: SessionSummary, samples: List<StateSample>, progress: Float, onBack: () -> Unit, onProgress: (Float) -> Unit) {
     val cursor = remember(samples) { ReplayCursor(samples) }
     val sample = cursor.sampleAt(progress)
-    Page("Session details", onBack) {
+    Page(if (summary.isBundledSimulation) "Saved simulation" else "Session details", onBack) {
         LazyColumn(Modifier.widthIn(max = HushSpace.contentWidth).fillMaxSize(), contentPadding = PaddingValues(HushSpace.xl), verticalArrangement = Arrangement.spacedBy(HushSpace.xl)) {
-            item { Text(formatDate(summary.startedAt), color = HushColors.Muted); Text(formatDuration(summary.actualSeconds), style = MaterialTheme.typography.displayLarge) }
+            item {
+                if (!summary.isBundledSimulation) Text(formatDate(summary.startedAt), color = HushColors.Muted)
+                Text(formatDuration(summary.actualSeconds), style = MaterialTheme.typography.displayLarge)
+            }
             item { ParticlePanel(sample, sample?.valid != true) }
             item { HushPanel(Modifier.fillMaxWidth()) {
                 Text("Replay", style = MaterialTheme.typography.titleMedium)

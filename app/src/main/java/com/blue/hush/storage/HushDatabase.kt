@@ -4,6 +4,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import com.blue.hush.processing.SessionResultClassifier
+import com.blue.hush.session.BUNDLED_SIMULATION_SESSION_ID
 import com.blue.hush.session.MusicTrack
 import com.blue.hush.session.ResultLabel
 import com.blue.hush.session.SessionSummary
@@ -50,6 +52,44 @@ class HushDatabase(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
     }
 
     fun insertSample(sessionId: Long, sample: StateSample) {
+        insertSample(writableDatabase, sessionId, sample)
+    }
+
+    /** Imports the bundled replay once, before normal history is loaded. */
+    fun ensureBundledSimulation(samples: List<StateSample>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val alreadyImported = db.query(
+                "sessions", arrayOf("id"), "id = ?",
+                arrayOf(BUNDLED_SIMULATION_SESSION_ID.toString()), null, null, null,
+            ).use { it.moveToFirst() }
+            if (!alreadyImported) {
+                val oldestStart = db.rawQuery("SELECT MIN(started_at) FROM sessions", null).use { cursor ->
+                    if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+                }
+                // The source has no timestamps. Place its synthetic interval before all real sessions.
+                val end = minOf(oldestStart ?: Long.MAX_VALUE, System.currentTimeMillis()) - 1
+                val start = end - samples.size * 1_000L
+                val values = ContentValues().apply {
+                    put("id", BUNDLED_SIMULATION_SESSION_ID)
+                    put("started_at", start)
+                    put("ended_at", end)
+                    put("planned_seconds", samples.size)
+                    put("actual_seconds", samples.size)
+                    put("track", MusicTrack.MIST.name)
+                    put("result", SessionResultClassifier.classify(samples).name)
+                }
+                db.insertOrThrow("sessions", null, values)
+                samples.forEach { insertSample(db, BUNDLED_SIMULATION_SESSION_ID, it) }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun insertSample(db: SQLiteDatabase, sessionId: Long, sample: StateSample) {
         val values = ContentValues().apply {
             put("session_id", sessionId)
             put("elapsed_seconds", sample.elapsedSeconds)
@@ -59,7 +99,7 @@ class HushDatabase(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
             sample.stillness?.let { put("stillness", it) } ?: putNull("stillness")
             put("valid", if (sample.valid) 1 else 0)
         }
-        writableDatabase.insertOrThrow("samples", null, values)
+        db.insertOrThrow("samples", null, values)
     }
 
     fun finishSession(sessionId: Long, endedAt: Long, actualSeconds: Int, result: ResultLabel) {

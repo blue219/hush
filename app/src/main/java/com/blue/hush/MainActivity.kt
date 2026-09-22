@@ -145,7 +145,6 @@ class MainActivity : ComponentActivity() {
                 syncDiscovery()
             }
         }
-        refreshHistory()
         refreshSimulationData()
         setContent {
             HushTheme {
@@ -418,11 +417,15 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshSimulationData() {
         ioExecutor.execute {
-            val available = MuseReplaySource.isUsable(MuseReplaySource.load(applicationContext))
+            val samples = MuseReplaySource.load(applicationContext)
+            val available = MuseReplaySource.isUsable(samples)
+            if (available) database.ensureBundledSimulation(samples)
+            val summaries = database.loadSummaries()
             mainHandler.post {
                 if (isDestroyed) return@post
                 simulationDataAvailable = available
                 connectionStateUi = connectionStateUi.copy(simulationDataAvailable = available)
+                history = summaries
             }
         }
     }
