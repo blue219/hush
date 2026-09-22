@@ -23,13 +23,15 @@ class SignalProcessorTest {
     }
 
     @Test
-    fun invalidSignalProducesExplicitGap() {
+    fun sensorPacketsRemainUsableWhenMuseReportsPoorSignalQuality() {
         val processor = SignalProcessor()
         processor.accept(MuseDataPacketType.IS_GOOD, listOf(0.0))
-        processor.accept(MuseDataPacketType.ALPHA_RELATIVE, listOf(0.5))
-        processor.accept(MuseDataPacketType.THETA_RELATIVE, listOf(0.5))
-        processor.accept(MuseDataPacketType.BETA_RELATIVE, listOf(0.5))
         processor.accept(MuseDataPacketType.ACCELEROMETER, listOf(0.0, 0.0, 1.0))
-        assertFalse(processor.nextSample(1).valid)
+        assertTrue(processor.nextSample(1).valid)
+    }
+
+    @Test
+    fun noSensorPacketsProduceExplicitGap() {
+        assertFalse(SignalProcessor().nextSample(1).valid)
     }
 }

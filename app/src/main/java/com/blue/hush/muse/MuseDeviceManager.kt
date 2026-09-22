@@ -135,9 +135,10 @@ class MuseDeviceManager(
         DATA_PACKET_TYPES.forEach { type ->
             muse.registerDataListener(dataListener, type)
         }
-        // Use Muse 2's stable core preset for EEG and IMU streaming.
-        // PPG remains registered for firmware that exposes the optional stream.
-        muse.setPreset(MusePreset.PRESET_21)
+        // Muse 2's p50 preset enables the sensor streams used by the app.
+        // The p21 EEG-only preset can connect successfully without emitting
+        // the derived bands needed to produce a valid meditation sample.
+        muse.setPreset(MusePreset.PRESET_50)
         connectedMuse = muse
         val currentState = muse.getConnectionState()
         if (currentState == ConnectionState.CONNECTED) {
@@ -152,6 +153,12 @@ class MuseDeviceManager(
 
     fun disconnect() {
         connectedMuse?.disconnect()
+        connectedMuse = null
+    }
+
+    /** Stops discovery without disconnecting the native Muse during ownership handoff. */
+    fun releaseForHandoff() {
+        stopScanning()
         connectedMuse = null
     }
 
