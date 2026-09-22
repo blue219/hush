@@ -15,6 +15,16 @@ object SessionRuntime {
         listeners.forEach { it(state) }
     }
 
+    fun resetToIdle(plannedSeconds: Int, track: MusicTrack, volume: Float) {
+        publish(
+            SessionState(
+                plannedSeconds = plannedSeconds,
+                track = track,
+                volume = volume,
+            ),
+        )
+    }
+
     fun subscribe(listener: (SessionState) -> Unit): () -> Unit {
         listeners += listener
         listener(current)

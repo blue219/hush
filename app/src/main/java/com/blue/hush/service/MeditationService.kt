@@ -46,6 +46,7 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
     private var lastSavedSecond = 0
     private var isConnecting = false
     private var currentState = SessionState()
+    private var latestValidSample: StateSample? = null
 
     private val tick = object : Runnable {
         override fun run() {
@@ -55,6 +56,7 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
                     val sample = processor.nextSample(elapsedSeconds)
                     sessionId?.let { database.insertSample(it, sample) }
                     samples += sample
+                    if (sample.valid) latestValidSample = sample
                     lastSavedSecond = elapsedSeconds
                     publish(
                         currentState.copy(
@@ -62,7 +64,8 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
                             dataGap = !currentState.connected || !sample.valid,
                             sampleCount = samples.size,
                             validSampleCount = samples.count { it.valid },
-                            latestSample = sample,
+                            // Keep the last valid visual state visible while a signal gap is shown.
+                            latestSample = latestValidSample ?: sample,
                             message = if (sample.valid) null else "Not enough valid sensor data for this second",
                         ),
                     )
@@ -171,6 +174,7 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
         currentVolume = intent.getFloatExtra(EXTRA_VOLUME, 0.7f).coerceIn(0f, 1f)
         sessionId = database.insertSession(System.currentTimeMillis(), plannedSeconds, selectedTrack)
         samples.clear()
+        latestValidSample = null
         lastSavedSecond = 0
         clock.start(SystemClock.elapsedRealtime())
         audioEngine = AmbientAudioEngine().also {

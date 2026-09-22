@@ -201,6 +201,7 @@ class MainActivity : ComponentActivity() {
                     onPause = { MeditationService.command(this, MeditationService.ACTION_PAUSE) },
                     onResume = { MeditationService.command(this, MeditationService.ACTION_RESUME) },
                     onFinish = { MeditationService.command(this, MeditationService.ACTION_FINISH) },
+                    onStartNewSession = ::resetCompletedSession,
                     onVolumeChanged = {
                         MeditationService.setVolume(this, it)
                         sessionState = sessionState.copy(volume = it)
@@ -270,6 +271,14 @@ class MainActivity : ComponentActivity() {
         MeditationService.start(this, address, deviceName, selectedDurationSeconds, selectedTrack, sessionState.volume)
     }
 
+    private fun resetCompletedSession() {
+        SessionRuntime.resetToIdle(
+            plannedSeconds = selectedDurationSeconds,
+            track = selectedTrack,
+            volume = sessionState.volume,
+        )
+    }
+
     private fun openDetail(summary: SessionSummary) {
         ioExecutor.execute {
             val samples = database.loadSamples(summary.id)
@@ -336,6 +345,7 @@ private fun HushApp(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onFinish: () -> Unit,
+    onStartNewSession: () -> Unit,
     onVolumeChanged: (Float) -> Unit,
     onOpenDetail: (SessionSummary) -> Unit,
     onCloseDetail: () -> Unit,
@@ -374,7 +384,8 @@ private fun HushApp(
             AppTab.MEDITATE -> MeditateScreen(
                 Modifier.padding(innerPadding), sessionState, connectionState, selectedDurationSeconds, selectedTrack,
                 onDurationSelected, onTrackSelected, onStartScanning, onConnect, onStartSession, onPause, onResume,
-                onFinish, onVolumeChanged, { id -> history.firstOrNull { it.id == id }?.let(onOpenDetail) }, onDisconnect,
+                onFinish, onStartNewSession, onVolumeChanged,
+                { id -> history.firstOrNull { it.id == id }?.let(onOpenDetail) }, onDisconnect,
             )
             AppTab.HISTORY -> HistoryScreen(Modifier.padding(innerPadding), history, onOpenDetail)
             AppTab.MUSIC -> MusicScreen(Modifier.padding(innerPadding), selectedTrack, previewTrack, onTrackSelected, onPreviewTrack)
@@ -397,6 +408,7 @@ private fun MeditateScreen(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onFinish: () -> Unit,
+    onStartNewSession: () -> Unit,
     onVolumeChanged: (Float) -> Unit,
     onOpenDetail: (Long) -> Unit,
     onDisconnect: () -> Unit,
@@ -404,7 +416,7 @@ private fun MeditateScreen(
     val isActive = sessionState.phase == SessionPhase.RUNNING || sessionState.phase == SessionPhase.PAUSED || sessionState.phase == SessionPhase.CONNECTING
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (sessionState.phase == SessionPhase.FINISHED) {
-            item { CompletionCard(sessionState, onOpenDetail) }
+            item { CompletionCard(sessionState, onOpenDetail, onStartNewSession) }
         } else if (isActive) {
             item { ActiveSessionCard(sessionState, onPause, onResume, onFinish, onVolumeChanged) }
         } else {
@@ -516,7 +528,11 @@ private fun ActiveSessionCard(state: SessionState, onPause: () -> Unit, onResume
 }
 
 @Composable
-private fun CompletionCard(state: SessionState, onOpenDetail: (Long) -> Unit) {
+private fun CompletionCard(
+    state: SessionState,
+    onOpenDetail: (Long) -> Unit,
+    onStartNewSession: () -> Unit,
+) {
     val result = state.result ?: ResultLabel.INSUFFICIENT
     Card {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -524,6 +540,9 @@ private fun CompletionCard(state: SessionState, onOpenDetail: (Long) -> Unit) {
             Text(result.title, style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary)
             Text(result.description, style = MaterialTheme.typography.bodyLarge)
             Text("Actual duration ${formatDuration(state.elapsedSeconds)} · valid samples ${state.validSampleCount}/${state.sampleCount}", style = MaterialTheme.typography.bodySmall)
+            Text("Mindprint", style = MaterialTheme.typography.titleMedium)
+            ParticlePanel(state.latestSample, state.latestSample?.valid != true)
+            OutlinedButton(onClick = onStartNewSession, modifier = Modifier.fillMaxWidth()) { Text("Meditate again") }
             state.sessionId?.let { Button(onClick = { onOpenDetail(it) }, modifier = Modifier.fillMaxWidth()) { Text("View this session") } }
             Text("This describes relative trends in this session and is not a medical assessment or absolute score.", style = MaterialTheme.typography.labelSmall)
         }
