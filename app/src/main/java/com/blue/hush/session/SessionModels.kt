@@ -17,7 +17,6 @@ enum class ResultLabel(val title: String, val description: String) {
     STEADY("Steady", "Your state changed only slightly during this session."),
     SETTLING("Settling", "The second half was steadier than the first."),
     VARIABLE("Variable", "Your state changed noticeably during this session."),
-    INSUFFICIENT("Insufficient data", "There was not enough valid sensor data to describe a trend."),
 }
 
 data class StateSample(

@@ -221,7 +221,7 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
     private fun finishSession() {
         val id = sessionId ?: return
         val elapsedSeconds = (clock.elapsedMillis(SystemClock.elapsedRealtime()) / 1_000L).toInt()
-        val result = SessionResultClassifier.classify(samples, plannedSeconds)
+        val result = SessionResultClassifier.classify(samples)
         database.finishSession(id, System.currentTimeMillis(), elapsedSeconds, result)
         clock.pause(SystemClock.elapsedRealtime())
         publish(

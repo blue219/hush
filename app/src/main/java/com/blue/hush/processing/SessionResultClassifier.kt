@@ -5,13 +5,10 @@ import com.blue.hush.session.StateSample
 import kotlin.math.abs
 
 object SessionResultClassifier {
-    fun classify(samples: List<StateSample>, plannedSeconds: Int): ResultLabel {
+    fun classify(samples: List<StateSample>): ResultLabel {
         val valid = samples.filter { it.valid }
-        val minimumRequired = (plannedSeconds / 4).coerceAtLeast(5)
-        if (valid.size < minimumRequired) return ResultLabel.INSUFFICIENT
-
         val stillness = valid.mapNotNull { it.stillness }
-        if (stillness.isEmpty()) return ResultLabel.INSUFFICIENT
+        if (stillness.isEmpty()) return ResultLabel.STEADY
         val mean = stillness.average()
         val variance = stillness.map { (it - mean) * (it - mean) }.average()
         val quarterSize = (valid.size / 4).coerceAtLeast(1)

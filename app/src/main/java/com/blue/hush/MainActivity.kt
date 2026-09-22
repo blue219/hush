@@ -533,7 +533,7 @@ private fun CompletionCard(
     onOpenDetail: (Long) -> Unit,
     onStartNewSession: () -> Unit,
 ) {
-    val result = state.result ?: ResultLabel.INSUFFICIENT
+    val result = state.result ?: ResultLabel.STEADY
     Card {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Meditation complete", style = MaterialTheme.typography.headlineSmall)
@@ -563,7 +563,7 @@ private fun HistoryScreen(modifier: Modifier, history: List<SessionSummary>, onO
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(summary.result.title, style = MaterialTheme.typography.titleMedium)
                         Text(formatDate(summary.startedAt), style = MaterialTheme.typography.bodySmall)
-                        Text("${summary.actualSeconds / 60} min · ${summary.track.title}", style = MaterialTheme.typography.bodySmall)
+                        Text("${formatDuration(summary.actualSeconds)} · ${summary.track.title}", style = MaterialTheme.typography.bodySmall)
                     }
                     Text("${summary.validSampleCount}/${summary.sampleCount} sec valid", style = MaterialTheme.typography.labelSmall)
                 }
@@ -582,7 +582,7 @@ private fun SessionDetailScreen(summary: SessionSummary, samples: List<StateSamp
         LazyColumn(Modifier.padding(innerPadding).fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item {
                 Text(summary.result.title, style = MaterialTheme.typography.headlineMedium)
-                Text("${formatDate(summary.startedAt)} · ${summary.track.title} · ${summary.validSampleCount}/${summary.sampleCount} sec valid", style = MaterialTheme.typography.bodyMedium)
+                Text("${formatDate(summary.startedAt)} · ${formatDuration(summary.actualSeconds)} · ${summary.track.title} · ${summary.validSampleCount}/${summary.sampleCount} sec valid", style = MaterialTheme.typography.bodyMedium)
             }
             item { ParticlePanel(replaySample, replaySample?.valid != true) }
             item {

@@ -19,7 +19,7 @@ class HushDatabase(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                 planned_seconds INTEGER NOT NULL,
                 actual_seconds INTEGER NOT NULL DEFAULT 0,
                 track TEXT NOT NULL,
-                result TEXT NOT NULL DEFAULT 'INSUFFICIENT'
+                result TEXT NOT NULL DEFAULT 'STEADY'
             )""".trimIndent(),
         )
         db.execSQL(
@@ -83,6 +83,7 @@ class HushDatabase(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
         buildList {
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+                val storedResult = cursor.getString(cursor.getColumnIndexOrThrow("result"))
                 add(
                     SessionSummary(
                         id = id,
@@ -91,7 +92,8 @@ class HushDatabase(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, 
                         plannedSeconds = cursor.getInt(cursor.getColumnIndexOrThrow("planned_seconds")),
                         actualSeconds = cursor.getInt(cursor.getColumnIndexOrThrow("actual_seconds")),
                         track = MusicTrack.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("track"))),
-                        result = ResultLabel.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("result"))),
+                        // Map legacy sessions created before short sessions received a result.
+                        result = runCatching { ResultLabel.valueOf(storedResult) }.getOrDefault(ResultLabel.STEADY),
                         sampleCount = countSamples(id, validOnly = false),
                         validSampleCount = countSamples(id, validOnly = true),
                     ),
