@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.blue.hush.audio.AmbientAudioEngine
 import com.blue.hush.muse.MuseDeviceManager
+import com.blue.hush.replay.MuseReplaySource
 import com.blue.hush.replay.ReplayCursor
 import com.blue.hush.service.MeditationService
 import com.blue.hush.session.MusicTrack
@@ -101,6 +102,7 @@ class MainActivity : ComponentActivity() {
     private var detailSamples by mutableStateOf<List<StateSample>>(emptyList())
     private var replayProgress by mutableFloatStateOf(0f)
     private var connectionStateUi by mutableStateOf(ConnectionUiState())
+    private var simulationDataAvailable by mutableStateOf(false)
     private var museManager: MuseDeviceManager? = null
     private val previewEngine = AmbientAudioEngine()
     private var previewTrack by mutableStateOf<MusicTrack?>(null)
@@ -170,6 +172,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         refreshHistory()
+        refreshSimulationData()
         setContent {
             HushTheme {
                 HushApp(
@@ -199,7 +202,15 @@ class MainActivity : ComponentActivity() {
                             connectedDeviceAddress = null,
                         )
                     },
-                    onStartSession = ::startSession,
+                    onStartSession = { startSession(connectionStateUi.simulationMode) },
+                    onSimulationModeChanged = { enabled ->
+                        connectionStateUi = connectionStateUi.copy(
+                            simulationMode = enabled,
+                            simulationDataAvailable = simulationDataAvailable,
+                            errorMessage = null,
+                        )
+                        if (enabled) selectedDurationSeconds = MuseReplaySource.DURATION_SECONDS
+                    },
                     onPause = { MeditationService.command(this, MeditationService.ACTION_PAUSE) },
                     onResume = { MeditationService.command(this, MeditationService.ACTION_RESUME) },
                     onFinish = { MeditationService.command(this, MeditationService.ACTION_FINISH) },
@@ -259,7 +270,22 @@ class MainActivity : ComponentActivity() {
         museManager?.connect(device)
     }
 
-    private fun startSession() {
+    private fun startSession(simulationMode: Boolean) {
+        if (simulationMode) {
+            if (!simulationDataAvailable) {
+                connectionStateUi = connectionStateUi.copy(errorMessage = "The saved 10-minute simulation data is unavailable.")
+                return
+            }
+            museManager?.close()
+            museManager = null
+            connectionStateUi = connectionStateUi.copy(
+                connectionState = null,
+                connectedDeviceAddress = null,
+                errorMessage = null,
+            )
+            MeditationService.startSimulation(this, selectedTrack, sessionState.volume)
+            return
+        }
         val address = connectionStateUi.connectedDeviceAddress
         if (address == null || connectionStateUi.connectionState != ConnectionState.CONNECTED.name) {
             connectionStateUi = connectionStateUi.copy(errorMessage = "Connect Muse 2 before starting meditation.")
@@ -297,6 +323,16 @@ class MainActivity : ComponentActivity() {
         ioExecutor.execute {
             val summaries = database.loadSummaries()
             mainHandler.post { history = summaries }
+        }
+    }
+
+    private fun refreshSimulationData() {
+        ioExecutor.execute {
+            val available = MuseReplaySource.isUsable(MuseReplaySource.load(applicationContext))
+            mainHandler.post {
+                simulationDataAvailable = available
+                connectionStateUi = connectionStateUi.copy(simulationDataAvailable = available)
+            }
         }
     }
 
@@ -345,6 +381,7 @@ private fun HushApp(
     onConnect: (MuseDeviceManager.MuseDevice) -> Unit,
     onDisconnect: () -> Unit,
     onStartSession: () -> Unit,
+    onSimulationModeChanged: (Boolean) -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onFinish: () -> Unit,
@@ -386,7 +423,7 @@ private fun HushApp(
             AppTab.MEDITATE -> MeditateScreen(
                 Modifier.padding(innerPadding), sessionState, connectionState, selectedDurationSeconds, selectedTrack,
                 onDurationSelected, onTrackSelected, onStartScanning, onConnect, onStartSession,
-                onStartNewSession,
+                onSimulationModeChanged, onStartNewSession,
                 { id -> history.firstOrNull { it.id == id }?.let(onOpenDetail) }, onDisconnect,
             )
             AppTab.HISTORY -> HistoryScreen(Modifier.padding(innerPadding), history, onOpenDetail)
@@ -407,6 +444,7 @@ private fun MeditateScreen(
     onStartScanning: () -> Unit,
     onConnect: (MuseDeviceManager.MuseDevice) -> Unit,
     onStartSession: () -> Unit,
+    onSimulationModeChanged: (Boolean) -> Unit,
     onStartNewSession: () -> Unit,
     onOpenDetail: (Long) -> Unit,
     onDisconnect: () -> Unit,
@@ -422,12 +460,17 @@ private fun MeditateScreen(
                     Text("Let change emerge slowly. There is nothing to chase.", style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            item { ConnectionCard(connectionState, onStartScanning, onConnect, onDisconnect) }
+            item { ConnectionCard(connectionState, onStartScanning, onConnect, onDisconnect, onSimulationModeChanged) }
             item {
                 Text("Choose a duration", style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                     listOf(10 * 60, 20 * 60, 30 * 60).forEach { seconds ->
-                        FilterChip(selected = selectedDurationSeconds == seconds, onClick = { onDurationSelected(seconds) }, label = { Text("${seconds / 60} min") })
+                        FilterChip(
+                            selected = selectedDurationSeconds == seconds,
+                            onClick = { onDurationSelected(seconds) },
+                            enabled = !connectionState.simulationMode || seconds == MuseReplaySource.DURATION_SECONDS,
+                            label = { Text("${seconds / 60} min") },
+                        )
                     }
                 }
             }
@@ -447,7 +490,8 @@ private fun MeditateScreen(
             item {
                 Button(
                     onClick = onStartSession,
-                    enabled = connectionState.connectedDeviceAddress != null && connectionState.connectionState == ConnectionState.CONNECTED.name,
+                    enabled = connectionState.simulationMode && connectionState.simulationDataAvailable ||
+                        connectionState.connectedDeviceAddress != null && connectionState.connectionState == ConnectionState.CONNECTED.name,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Start meditation") }
             }
@@ -461,12 +505,15 @@ private fun ConnectionCard(
     onStartScanning: () -> Unit,
     onConnect: (MuseDeviceManager.MuseDevice) -> Unit,
     onDisconnect: () -> Unit,
+    onSimulationModeChanged: (Boolean) -> Unit,
 ) {
     Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Muse 2", style = MaterialTheme.typography.titleMedium)
             Text(
                 when {
+                    state.simulationMode && state.simulationDataAvailable -> "Simulation data ready · 10-minute replay"
+                    state.simulationMode -> "Simulation data unavailable"
                     !state.hasBluetoothPermission -> "Bluetooth permission required"
                     state.connectionState == ConnectionState.CONNECTED.name -> "Connected and ready"
                     state.isScanning -> "Looking for nearby devices…"
@@ -482,11 +529,21 @@ private fun ConnectionCard(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onStartScanning, enabled = !state.isScanning) { Text(if (state.hasBluetoothPermission) "Scan" else "Grant permission") }
+                Button(onClick = onStartScanning, enabled = !state.isScanning && !state.simulationMode) { Text(if (state.hasBluetoothPermission) "Scan" else "Grant permission") }
                 if (state.connectedDeviceAddress != null) {
                     OutlinedButton(onClick = onDisconnect) { Text("Disconnect") }
                 }
             }
+            FilterChip(
+                selected = state.simulationMode,
+                onClick = { onSimulationModeChanged(!state.simulationMode) },
+                label = { Text("Use saved simulation data") },
+            )
+            Text(
+                if (state.simulationDataAvailable) "Replays the latest complete 10-minute session bundled with this app."
+                else "No bundled 10-minute session is available.",
+                style = MaterialTheme.typography.labelSmall,
+            )
             state.devices.take(3).forEach { device ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -659,6 +716,8 @@ private data class ConnectionUiState(
     val dataPacketCount: Int = 0,
     val lastDataPacketType: String? = null,
     val errorMessage: String? = null,
+    val simulationMode: Boolean = false,
+    val simulationDataAvailable: Boolean = false,
 )
 
 private fun formatDuration(seconds: Int): String = "%02d:%02d".format(seconds / 60, seconds % 60)

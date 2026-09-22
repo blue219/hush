@@ -56,3 +56,9 @@ Run `./gradlew :app:testDebugUnitTest --tests com.blue.hush.GalaxyMotionTest --t
 On a physical Android device, check calm → scattered → regrouped motion, signal loss/recovery, pause/resume, background/foreground, portrait/landscape, system-bar restoration, and volume/Back/Finish controls. Confirm readable controls at small screen sizes and larger font settings. Measure frame timing before claiming near-60 FPS; compilation and deterministic motion tests do not establish visual performance.
 
 The focused on-device UI test can be run with `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.blue.hush.MeditationGalaxyScreenTest`. It uses synthetic samples without starting a real meditation service, covers controls, frozen particles, signal messages, lifecycle resume, and landscape layout, and writes screenshots to the target app's external files directory. These checks do not validate a physical Muse signal or long-session frame pacing.
+
+## Saved simulation data
+
+The Meditation tab's connection card includes `Use saved simulation data`. It replays the checked-in ten-minute sample at `app/src/main/assets/simulation/muse_last_10m.csv` through the same foreground-session state path used by a live Muse connection. The file was exported from the latest complete ten-minute session available on the development phone; it contains 600 valid one-second samples and no device identifiers or timestamps.
+
+Simulation mode does not scan Bluetooth, always uses the ten-minute duration, plays the selected soundscape, and saves the replay as a normal local session. If the asset is missing or malformed, the option remains unavailable and the real Muse connection path is unchanged.

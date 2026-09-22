@@ -18,6 +18,7 @@ import com.blue.hush.audio.AmbientAudioEngine
 import com.blue.hush.muse.MuseDeviceManager
 import com.blue.hush.processing.SessionResultClassifier
 import com.blue.hush.processing.SignalProcessor
+import com.blue.hush.replay.MuseReplaySource
 import com.blue.hush.session.MusicTrack
 import com.blue.hush.session.ResultLabel
 import com.blue.hush.session.SessionClock
@@ -47,13 +48,15 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
     private var isConnecting = false
     private var currentState = SessionState()
     private var latestValidSample: StateSample? = null
+    private var simulationMode = false
+    private var replaySamples: List<StateSample> = emptyList()
 
     private val tick = object : Runnable {
         override fun run() {
             if (currentState.phase == SessionPhase.RUNNING) {
                 val elapsedSeconds = (clock.elapsedMillis(SystemClock.elapsedRealtime()) / 1_000L).toInt()
                 if (elapsedSeconds > lastSavedSecond) {
-                    val sample = processor.nextSample(elapsedSeconds)
+                    val sample = if (simulationMode) replaySampleAt(elapsedSeconds) else processor.nextSample(elapsedSeconds)
                     sessionId?.let { database.insertSample(it, sample) }
                     samples += sample
                     if (sample.valid) latestValidSample = sample
@@ -166,9 +169,20 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
 
     private fun startSession(intent: Intent) {
         if (sessionId != null) return
+        simulationMode = intent.getBooleanExtra(EXTRA_SIMULATION_MODE, false)
+        replaySamples = if (simulationMode) MuseReplaySource.load(applicationContext) else emptyList()
+        if (simulationMode && !MuseReplaySource.isUsable(replaySamples)) {
+            publish(SessionState(message = "The saved 10-minute simulation data is unavailable."))
+            stopSelf()
+            return
+        }
         desiredMacAddress = intent.getStringExtra(EXTRA_DEVICE_ADDRESS).orEmpty()
         desiredDeviceName = intent.getStringExtra(EXTRA_DEVICE_NAME).orEmpty().ifBlank { "Muse 2" }
-        plannedSeconds = intent.getIntExtra(EXTRA_PLANNED_SECONDS, 20 * 60).coerceIn(10 * 60, 30 * 60)
+        plannedSeconds = if (simulationMode) {
+            MuseReplaySource.DURATION_SECONDS
+        } else {
+            intent.getIntExtra(EXTRA_PLANNED_SECONDS, 20 * 60).coerceIn(10 * 60, 30 * 60)
+        }
         selectedTrack = intent.getStringExtra(EXTRA_TRACK)?.let { runCatching { MusicTrack.valueOf(it) }.getOrNull() }
             ?: MusicTrack.MIST
         currentVolume = intent.getFloatExtra(EXTRA_VOLUME, 0.7f).coerceIn(0f, 1f)
@@ -181,21 +195,23 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
             it.setVolume(currentVolume)
             it.play(selectedTrack)
         }
-        museManager = MuseDeviceManager(applicationContext, this)
+        museManager = if (simulationMode) null else MuseDeviceManager(applicationContext, this)
         publish(
             SessionState(
                 phase = SessionPhase.RUNNING,
                 sessionId = sessionId,
                 plannedSeconds = plannedSeconds,
-                connected = false,
-                deviceName = desiredDeviceName,
+                connected = simulationMode,
+                deviceName = if (simulationMode) "Saved Muse simulation" else desiredDeviceName,
                 track = selectedTrack,
                 volume = currentVolume,
-                message = "Connecting to Muse 2…",
+                message = if (simulationMode) "Replaying saved Muse data…" else "Connecting to Muse 2…",
             ),
         )
-        runCatching { museManager?.startScanning() }.onFailure {
-            publish(currentState.copy(message = "Could not start Muse scanning. Check Bluetooth permission."))
+        if (!simulationMode) {
+            runCatching { museManager?.startScanning() }.onFailure {
+                publish(currentState.copy(message = "Could not start Muse scanning. Check Bluetooth permission."))
+            }
         }
         handler.removeCallbacks(tick)
         handler.post(tick)
@@ -247,6 +263,10 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
         SessionRuntime.publish(state)
         updateNotification()
     }
+
+    private fun replaySampleAt(elapsedSeconds: Int): StateSample =
+        replaySamples.firstOrNull { it.elapsedSeconds == elapsedSeconds }
+            ?: StateSample(elapsedSeconds = elapsedSeconds)
 
     private fun startAsForeground() {
         val notification = buildNotification()
@@ -302,6 +322,7 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
         const val EXTRA_PLANNED_SECONDS = "planned_seconds"
         const val EXTRA_TRACK = "track"
         const val EXTRA_VOLUME = "volume"
+        const val EXTRA_SIMULATION_MODE = "simulation_mode"
 
         fun start(context: Context, deviceAddress: String, deviceName: String, plannedSeconds: Int, track: MusicTrack, volume: Float) {
             val intent = Intent(context, MeditationService::class.java).apply {
@@ -309,6 +330,17 @@ class MeditationService : Service(), MuseDeviceManager.Listener {
                 putExtra(EXTRA_DEVICE_ADDRESS, deviceAddress)
                 putExtra(EXTRA_DEVICE_NAME, deviceName)
                 putExtra(EXTRA_PLANNED_SECONDS, plannedSeconds)
+                putExtra(EXTRA_TRACK, track.name)
+                putExtra(EXTRA_VOLUME, volume)
+            }
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        fun startSimulation(context: Context, track: MusicTrack, volume: Float) {
+            val intent = Intent(context, MeditationService::class.java).apply {
+                action = ACTION_START
+                putExtra(EXTRA_SIMULATION_MODE, true)
+                putExtra(EXTRA_PLANNED_SECONDS, MuseReplaySource.DURATION_SECONDS)
                 putExtra(EXTRA_TRACK, track.name)
                 putExtra(EXTRA_VOLUME, volume)
             }
