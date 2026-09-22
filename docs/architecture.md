@@ -21,4 +21,8 @@ The service also reads the same source by second through its normal timing, stor
 
 ## UI and rendering
 
-The UI consumes processed `SessionState` and `StateSample` values. `GalaxyParticleField` and `GalaxyMotion` own the visual mapping and animation; composables do not receive raw LibMuse packets or write session samples. See [design system](design-system.md) for screen conventions and [MVP usage](mvp.md) for device validation.
+The UI consumes processed `SessionState` and `StateSample` values. `GalaxyParticleField` and `GalaxyMotion` own the visual mapping and animation; composables do not receive raw LibMuse packets or write session samples. See [design system](design-system.md) for screen conventions and [README](../README.md) for build and device validation commands.
+
+## Validation boundary
+
+`./gradlew.bat test` covers the JVM processing, replay, session-sample, auto-connect, and deterministic-motion tests. Compose and service integration checks run through `:app:connectedDebugAndroidTest` on a configured device. Neither automated suite proves Muse Bluetooth reliability, long-session timing, background reconnection, audio behavior under lock screen, or frame pacing; those require a physical Android device and Muse 2.

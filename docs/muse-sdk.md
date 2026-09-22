@@ -28,27 +28,3 @@ The launcher activity exposes the MVP meditation flow. Home owns the connection 
 2. Put the Muse 2 into pairing mode. Home searches automatically while visible.
 3. Hush automatically connects the remembered device, or the only discovered device on first use. Select a device in the sheet when multiple devices are available.
 4. Choose a duration and music track, then tap `Start meditation`.
-
-## MVP session flow
-
-The visible meditation page starts `MeditationService` only after a connected Muse device has been selected. The service is declared with `connectedDevice|mediaPlayback`, owns the Muse adapter and generated ambient audio, and continues its monotonic timer while the activity is not visible. A disconnect leaves the timer running, writes explicit invalid per-second samples, and restarts scanning for the same MAC address.
-
-`SignalProcessor` consumes only Alpha, Theta, and Beta relative-power packets, accelerometer packets, and `IS_GOOD`. It emits one smoothed `StateSample` per second. The database stores that state sample and the completed session metadata; it does not store raw EEG, PPG, or other packet payloads. PPG remains registered in the Muse adapter for later processing, but heart-rate extraction is deliberately outside this MVP.
-
-The History tab uses the same saved samples for the Alpha/Theta/Beta/stillness relative-trend chart, the particle Mindprint, and the draggable replay cursor. Invalid samples remain gaps in the chart and replay instead of being filled from neighboring values.
-
-`MuseDeviceManager` registers the available Muse 2 streams exposed by LibMuse:
-
-- raw EEG, absolute/relative Delta, Theta, Alpha, Beta, and Gamma bands, and band scores;
-- accelerometer and gyroscope data;
-- PPG plus PPG/heart-signal quality flags;
-- EEG signal quality (`IS_GOOD`), HSI, and HSI precision;
-- battery and artifact packets.
-
-The session service consumes the relevant band, accelerometer, and signal-quality callbacks. PPG is the raw optical pulse signal; heart-rate extraction still requires a processing step after receiving PPG. Some packet types are generic LibMuse types and may not emit values on every Muse model. A physical Muse 2 and a real Android device with Bluetooth are required; an emulator cannot validate the Bluetooth/data path.
-
-The connection path selects Muse 2's `PRESET_50` stream so the app receives the derived EEG bands and available IMU/PPG data needed for session samples. When LibMuse reports a temporary `NaN` band value or poor signal-quality flag, the processor keeps the sample alive from the sensor streams that are available; only a second with no sensor callback is shown as a data gap. For meaningful EEG bands, make sure the band is worn correctly and reconnect after installing the latest debug APK.
-
-## Discovery ownership
-
-Idle discovery belongs only to the visible Home route. History, backgrounding, simulation, and session handoff cancel pending selections/retries and stop discovery. The active session service retains its existing background reconnection policy. The remembered address is a local preference, excluded from backup by the application policy. The UI uses typed `ConnectionState` values; it never infers connectivity from status text. See [MVP](mvp.md) for retry and manual-disconnect behavior.

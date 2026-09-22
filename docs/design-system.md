@@ -33,4 +33,4 @@ Use safe system insets, bounded content widths, scrollable content, semantic nam
 
 No calm/focus scores or medical interpretation are introduced. No database migration is required. Device addresses remain local preferences. Frame-rate and Bluetooth reliability claims require measurement on a physical target device.
 
-All main particle views use GalaxyParticleField and its fixed seed, palette, glow, and trails. Home and live meditation share motion state with the frozen completion Mindprint; recorded detail frames use the same renderer. HomeParticleField and the former static ring renderer are removed.
+All main particle views use `GalaxyParticleField`, `GalaxyNebula`, and their fixed seed, palette, glow, and trails. Home and live meditation share motion state with the frozen completion Mindprint; recorded detail frames use the same renderer. The renderer is implemented with Compose Canvas and procedural 2D drawing.
