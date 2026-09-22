@@ -47,4 +47,4 @@ The History tab uses the same saved samples for the Alpha/Theta/Beta/stillness r
 
 The session service consumes the relevant band, accelerometer, and signal-quality callbacks. PPG is the raw optical pulse signal; heart-rate extraction still requires a processing step after receiving PPG. Some packet types are generic LibMuse types and may not emit values on every Muse model. A physical Muse 2 and a real Android device with Bluetooth are required; an emulator cannot validate the Bluetooth/data path.
 
-The connection path selects `PRESET_50` so the Muse 2 optical/PPG channels are enabled. If PPG still does not appear, make sure the band is worn correctly, the optical sensor on the right forehead is in contact with skin, and reconnect after installing the latest debug APK.
+The connection path selects Muse 2's `PRESET_21` core stream for reliable EEG and IMU data. PPG remains registered when the device firmware exposes it, but it is optional for the MVP. If the signal is missing, make sure the band is worn correctly and reconnect after installing the latest debug APK.

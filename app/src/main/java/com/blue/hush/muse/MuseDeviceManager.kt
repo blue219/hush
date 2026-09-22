@@ -135,9 +135,9 @@ class MuseDeviceManager(
         DATA_PACKET_TYPES.forEach { type ->
             muse.registerDataListener(dataListener, type)
         }
-        // Muse 2's PPG/optical channels are enabled by the PPG preset.
-        // PRESET_21 streams the core EEG/IMU channels but does not expose PPG.
-        muse.setPreset(MusePreset.PRESET_50)
+        // Use Muse 2's stable core preset for EEG and IMU streaming.
+        // PPG remains registered for firmware that exposes the optional stream.
+        muse.setPreset(MusePreset.PRESET_21)
         connectedMuse = muse
         val currentState = muse.getConnectionState()
         if (currentState == ConnectionState.CONNECTED) {

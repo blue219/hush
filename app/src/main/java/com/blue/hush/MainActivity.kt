@@ -264,8 +264,10 @@ class MainActivity : ComponentActivity() {
             return
         }
         val deviceName = connectionStateUi.devices.firstOrNull { it.macAddress == address }?.name ?: "Muse 2"
-        // Leave the native Muse instance running. The service creates its own
-        // adapter and claims the existing connection without a disconnect gap.
+        // Release the activity-owned adapter before the foreground service takes
+        // ownership. A clean reconnect is more reliable than two adapters
+        // registering listeners on the same native Muse instance.
+        museManager?.close()
         museManager = null
         connectionStateUi = connectionStateUi.copy(connectionState = "DISCONNECTED", connectedDeviceAddress = null)
         MeditationService.start(this, address, deviceName, selectedDurationSeconds, selectedTrack, sessionState.volume)
